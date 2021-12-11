@@ -1,0 +1,23 @@
+[package]
+name = "ba_api"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+reqwest = { version = "0.11.5", features = ["json", "socks"] }
+ring = { version = "0.16.20" }
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1.0.130", features = ["derive"] }
+serde_json = "1.0.68"
+serde_yaml = "0.8"
+hex = "0.4.3"
+thiserror = "1.0.30"
+tracing = "0.1.29"
+serde_urlencoded = "0.7.0"
+tokio-tungstenite = { version = "0.16", features = ["native-tls"] }
+futures-util = "0.3.18"
+
+[dev-dependencies]
+tracing-subscriber = "0.3.3"
