@@ -1,3 +1,9 @@
 pub mod kline;
 pub mod kline_interval;
 pub mod order;
+pub mod account;
+pub mod other_types;
+pub mod ws_response;
+pub mod depth;
+pub mod symbol_info;
+pub mod ticker;

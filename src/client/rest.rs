@@ -1,7 +1,4 @@
-use crate::{
-    client::helper,
-    errors::{MethodError, RestApiError, RestResult},
-};
+use crate::errors::{MethodError, RestApiError, RestResult};
 use reqwest::{header, Url};
 use serde::Serialize;
 use std::{fmt::Debug, str::FromStr};
@@ -14,10 +11,39 @@ pub const BASE_URL: &str = "https://api.binance.com";
 /// REST响应体
 pub(crate) type RespBody = String;
 
+mod helper {
+    use ring::hmac;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    pub fn timestamp() -> u128 {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis()
+    }
+
+    pub fn signature(key: &str, obj: &str) -> String {
+        let key_bytes = key.as_bytes();
+        let obj_bytes = obj.as_bytes();
+
+        let sign_key = hmac::Key::new(hmac::HMAC_SHA256, key_bytes);
+        let sign = hmac::sign(&sign_key, obj_bytes);
+        hex::encode(sign)
+    }
+    
+    #[test]
+    fn test_signature() {
+        let key = "NhqPtmdSJYdKjVHjA7PZj4Mge3R5YNiP1e3UZjInClVN65XAbvqqM6A7H5fATj0j";
+        let obj = "symbol=LTCBTC&side=BUY&type=LIMIT&timeInForce=GTC&quantity=1&price=0.1&recvWindow=5000&timestamp=1499827319559";
+        assert_eq!(
+            signature(key, obj),
+            "c8db56825ae71d6d79447849e617115f4a920fa2acdcab2b053c4b2838bd6b71".to_string()
+        )
+    }
+}
+
 /// 币安只支持GET POST PUT和DELETE四种HTTP方法
 /// ```rust
-/// use ba_api::client::RestMethod;
-///
 /// assert_eq!(RestMethod::from_str('get'), RestMethod::Get);
 /// assert_eq!(RestMethod::from_str('GET'), RestMethod::Get);
 /// ```
@@ -33,7 +59,6 @@ impl FromStr for RestMethod {
     type Err = MethodError;
 
     ///```rust
-    /// use ba_api::client::RestMethod;
     /// RestMethod::from("get");
     /// RestMethod::from("Get");
     /// RestMethod::from("GET");
@@ -62,8 +87,6 @@ pub struct RestConn {
 #[allow(dead_code)]
 impl RestConn {
     ///```rust
-    ///use ba_api::client::RestConn;
-    ///
     ///let api_key = "abcdefhijklmnopqrstuvwxyz";
     ///let sec_key = "abcdefhijklmnopqrstuvwxyz";
     ///let rest_conn = RestConn::new(api_key, sec_key, Some("http://127.0.0.1:8118"));

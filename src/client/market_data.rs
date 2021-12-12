@@ -1,15 +1,16 @@
 use tracing::instrument;
 
 use crate::errors::RestResult;
+use crate::types::depth::Depth;
+use crate::types::order::{AggTrade, HistoricalTrade, Trade};
+use crate::types::other_types::{AvgPrice, Prices, ServerTime};
+use crate::types::symbol_info::ExchangeInfo;
+use crate::types::ticker::{BookTickers, FullTickers};
 use crate::KLines;
 
 use super::params::{
     PAggTrades, PAvgPrice, PBookTicker, PDepth, PExchangeInfo, PHistoricalTrades, PHr24, PKLine,
     PPing, PPrice, PServerTime, PTrades,
-};
-use super::rest_response::{
-    AggTrade, AvgPrice, Depth, ExchangeInfo, HistoricalTrade, FullTickers, Prices, ServerTime, BookTickers,
-    Trade,
 };
 use super::RestConn;
 

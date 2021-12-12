@@ -175,30 +175,6 @@ impl From<WebSocketKLine> for KLine {
     }
 }
 
-/// 获取指定币指定类型的最近N根K线
-/// get_coin_klines(conn, 'btcusdt', KLineType::Min1, 5)
-// pub async fn get_coin_klines(
-//     conn: reqwest::Client,
-//     sym: &str,
-//     kline_type: KLineType,
-//     cnt: u16,
-// ) -> Option<Vec<KLine>> {
-//     let path = "/api/v3/klines";
-//     let params = format!(
-//         "symbol={}&interval={}&limit={}",
-//         sym.to_symbol(),
-//         kline_type,
-//         cnt
-//     );
-//     match rest_req(conn, path, &params).await {
-//         Some(body) => match serde_json::from_str::<Vec<KLine>>(&body) {
-//             Ok(klines) => Some(klines),
-//             Err(_) => None,
-//         },
-//         None => None,
-//     }
-// }
-
 #[cfg(test)]
 mod kline_test {
     use super::*;

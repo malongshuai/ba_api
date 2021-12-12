@@ -28,6 +28,24 @@ pub enum OrderStatus {
     Expired,
 }
 
+/// 订单被触发了什么操作
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum OrderAction {
+    /// 创建新订单的操作
+    New,
+    /// 订单有成交信息的操作
+    Trade,
+    /// 订单被撤销的操作
+    Canceled,
+    /// 订单请求被拒绝的操作
+    Rejected,
+    /// 订单失效的操作
+    Expired,
+    /// 尚未使用的保留字段
+    Reeplaced,
+}
+
 /// 订单类型(参考<https://www.binance.com/cn/support/articles/360033779452-Types-of-Order>)
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -122,6 +140,162 @@ impl From<&str> for TimeInForce {
             s => panic!("`{}' unsupported TimeInForce", s),
         }
     }
+}
+
+/// 逐笔交易
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(from = "WrapTrade")]
+pub struct Trade {
+    /// 交易对
+    pub symbol: String,
+    /// 交易ID
+    pub id: u64,
+    /// 成交价格
+    pub price: f64,
+    /// 成交数量
+    pub qty: f64,
+    /// 成交时间
+    pub time: u64,
+    /// 买方是否是做市方
+    pub is_buyer_maker: bool,
+    /// 是否是最优匹配，忽略该字段
+    pub is_best_match: bool,
+}
+
+impl From<WrapTrade> for Trade {
+    fn from(trade: WrapTrade) -> Self {
+        match trade {
+            WrapTrade::RestTrade(data) => Self {
+                symbol: String::new(),
+                id: data.id,
+                price: data.price,
+                qty: data.qty,
+                time: data.time,
+                is_buyer_maker: data.is_buyer_maker,
+                is_best_match: data.is_best_match,
+            },
+            WrapTrade::WebSocketTrade(data) => Self {
+                symbol: data.symbol,
+                id: data.id,
+                price: data.price,
+                qty: data.qty,
+                time: data.time,
+                is_buyer_maker: data.is_buyer_maker,
+                is_best_match: data.is_best_match,
+            },
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(untagged)]
+enum WrapTrade {
+    RestTrade(RestTrade),
+    WebSocketTrade(WebSocketTrade),
+}
+
+/// 逐笔交易(Rest接口)
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RestTrade {
+    /// 交易ID
+    id: u64,
+    /// 成交价格
+    #[serde(deserialize_with = "string_to_f64")]
+    price: f64,
+    /// 成交数量
+    #[serde(deserialize_with = "string_to_f64")]
+    qty: f64,
+    /// 成交时间
+    time: u64,
+    /// 买方是否是做市方
+    is_buyer_maker: bool,
+    /// 是否是最优匹配，忽略该字段
+    is_best_match: bool,
+}
+
+/// 逐笔交易(WebSocket接口)
+#[derive(Debug, Serialize, Deserialize)]
+struct WebSocketTrade {
+    /// 交易对
+    #[serde(rename = "s")]
+    symbol: String,
+    /// 交易ID
+    #[serde(rename = "t")]
+    id: u64,
+    /// 成交价格
+    #[serde(rename = "p", deserialize_with = "string_to_f64")]
+    price: f64,
+    /// 成交数量
+    #[serde(rename = "q", deserialize_with = "string_to_f64")]
+    qty: f64,
+    /// 成交时间
+    #[serde(rename = "T")]
+    time: u64,
+    /// 买方是否是做市方
+    #[serde(rename = "m")]
+    is_buyer_maker: bool,
+    /// 是否是最优匹配，忽略该字段
+    #[serde(rename = "M")]
+    is_best_match: bool,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HistoricalTrade {
+    pub id: u64,
+    #[serde(deserialize_with = "string_to_f64")]
+    pub price: f64,
+    #[serde(deserialize_with = "string_to_f64")]
+    pub qty: f64,
+    #[serde(deserialize_with = "string_to_f64")]
+    pub quote_qty: f64,
+    pub time: u64,
+    pub is_buyer_maker: bool,
+    pub is_best_match: bool,
+}
+
+/// 归集订单数据
+#[derive(Debug, Deserialize, Serialize)]
+pub struct AggTrade {
+    /// 交易对
+    #[serde(default)]
+    #[serde(rename = "s")]
+    pub symbol: String,
+
+    /// 归集成交ID
+    #[serde(rename = "a")]
+    pub id: u64,
+
+    /// 成交价
+    #[serde(rename = "p")]
+    #[serde(deserialize_with = "string_to_f64")]
+    pub price: f64,
+
+    /// 成交量
+    #[serde(rename = "q")]
+    #[serde(deserialize_with = "string_to_f64")]
+    pub qty: f64,
+
+    /// 该归集的首个成交ID
+    #[serde(rename = "f")]
+    pub first_id: u64,
+
+    /// 该归集的末个成交ID
+    #[serde(rename = "l")]
+    pub last_id: u64,
+
+    /// 该归集的成交时间
+    #[serde(rename = "T")]
+    pub time: u64,
+
+    /// 是否为主动卖出单
+    #[serde(rename = "m")]
+    pub is_buyer_maker: bool,
+
+    /// 是否为最优撮合单(可忽略，目前总是为最优撮合)
+    #[serde(rename = "M")]
+    pub is_best_match: bool,
 }
 
 /// 订单的交易信息
@@ -348,4 +522,133 @@ pub struct MyTrades {
     pub is_maker: bool,
     /// 是否是最优挂单
     pub is_best_match: bool,
+}
+
+/// 订单更新信息(来自WebSocket的推送)
+#[derive(Debug, Deserialize, Serialize)]
+pub struct OrderUpdate {
+    #[serde(rename = "s")]
+    pub symbol: String,
+    #[serde(rename = "c")]
+    pub client_order_id: String,
+    #[serde(rename = "S")]
+    pub side: OrderSide,
+    #[serde(rename = "o")]
+    pub order_type: OrderType,
+    #[serde(rename = "f")]
+    pub time_in_force: TimeInForce,
+    /// 订单原始数量
+    #[serde(rename = "q", deserialize_with = "string_to_f64")]
+    pub qty: f64,
+    /// 订单原始价格
+    #[serde(rename = "p", deserialize_with = "string_to_f64")]
+    pub price: f64,
+    /// 订单止盈、止损价格
+    #[serde(rename = "P", deserialize_with = "string_to_f64")]
+    pub stop_price: f64,
+    /// 冰山单数量
+    #[serde(rename = "F", deserialize_with = "string_to_f64")]
+    pub iceberg_qty: f64,
+    /// OCO订单ID
+    #[serde(rename = "g")]
+    pub order_list_id: i64,
+    /// 原始订单的client order id，撤单操作有自己的cid
+    #[serde(rename = "C")]
+    pub orig_client_order_id: String,
+    /// 触发推送该订单信息的操作
+    #[serde(rename = "x")]
+    pub order_action: OrderAction,
+    /// 订单的状态
+    #[serde(rename = "X")]
+    pub order_status: OrderStatus,
+    /// 订单被拒绝的原因
+    #[serde(rename = "r")]
+    pub reason: String,
+    /// 订单ID
+    #[serde(rename = "i")]
+    pub order_id: u64,
+    /// 订单末次成交量
+    #[serde(rename = "l", deserialize_with = "string_to_f64")]
+    pub last_qty: f64,
+    /// 订单已累计的成交量
+    #[serde(rename = "z", deserialize_with = "string_to_f64")]
+    pub cummulative_qty: f64,
+    /// 订单末次成交价
+    #[serde(rename = "L", deserialize_with = "string_to_f64")]
+    pub last_price: f64,
+    /// 手续费数量
+    #[serde(rename = "n", deserialize_with = "string_to_f64")]
+    pub fee_qty: f64,
+    /// 手续费资产名称，不产生手续费的订单状态(例如挂单和完全未成交的撤单)其值为null，可能为字符串
+    #[serde(rename = "N")]
+    pub fee_quote: Option<String>,
+    /// 该成交的成交时间
+    #[serde(rename = "T")]
+    pub trade_time: u64,
+    /// 该成交的成交ID(trade ID)
+    #[serde(rename = "t")]
+    pub trade_id: i64,
+    /// 订单是否在订单薄上
+    #[serde(rename = "w")]
+    pub in_order_book: bool,
+    /// 该成交是否是作为挂单成交(是否是maker方)
+    #[serde(rename = "m")]
+    pub maker: bool,
+    /// 订单创建时间
+    #[serde(rename = "O")]
+    pub order_create_time: u64,
+    /// 订单累计成交额
+    #[serde(rename = "Z", deserialize_with = "string_to_f64")]
+    pub cummulative_vol: f64,
+    /// 订单末次成交额
+    #[serde(rename = "Y", deserialize_with = "string_to_f64")]
+    pub last_vol: f64,
+    #[serde(rename = "Q", deserialize_with = "string_to_f64")]
+    /// quote order qty
+    pub dont_know_field: f64,
+}
+
+
+#[cfg(test)]
+mod test {
+    use crate::types::order::Trade;
+
+    #[test]
+    fn test_rest_trade() {
+        let rest_trade = r##"
+            {
+              "id": 28457,
+              "price": "4.00000100",
+              "qty": "12.00000000",
+              "time": 1499865549590,
+              "isBuyerMaker": true,
+              "isBestMatch": true
+            }
+        "##;
+        let x = serde_json::from_str::<Trade>(rest_trade);
+        // println!("{:?}", x);
+        assert!(x.is_ok());
+    }
+
+    #[test]
+    fn test_ws_trade() {
+        let websocket_trade = r##"
+            {
+              "e": "trade",  
+              "E": 123456789,
+              "s": "BNBBTC", 
+              "t": 12345,    
+              "p": "0.001",  
+              "q": "100",    
+              "b": 88,       
+              "a": 50,       
+              "T": 123456785,
+              "m": true,     
+              "M": true      
+            }
+        "##;
+        let x = serde_json::from_str::<Trade>(websocket_trade);
+        // println!("{:?}", x);
+        assert!(x.is_ok());
+    }
 }

@@ -19,7 +19,7 @@ use crate::{
 
 type WsStream = WebSocketStream<MaybeTlsStream<TcpStream>>;
 
-const BASE_URL: &str = "wss://stream.binance.com:9443";
+pub const BASE_URL: &str = "wss://stream.binance.com:9443";
 
 /// 内部ws连接，只支持订阅组合Stream(参考<https://binance-docs.github.io/apidocs/spot/cn/#websocket>)
 #[derive(Debug)]
@@ -413,11 +413,10 @@ impl WsClient {
     ///
     /// 包括账户更新、余额更新、订单更新，参考(<https://binance-docs.github.io/apidocs/spot/cn/#websocket-2>)  
     pub async fn account(
-        listen_key: &str,
+        listen_key: String,
         data_sender: mpsc::Sender<String>,
         close_receiver: mpsc::Receiver<bool>,
     ) -> WsResult<()> {
-        Ok(Self::sub_channel(listen_key, vec![], data_sender, close_receiver).await?)
+        Ok(Self::sub_channel(&listen_key, vec![], data_sender, close_receiver).await?)
     }
-
 }

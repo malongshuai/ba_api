@@ -273,8 +273,6 @@ pub struct PKLine {
 impl PKLine {
     /// 生成请求K线的请求参数
     /// ```rust
-    /// use ba_api::client::params;
-    ///
     /// let pkline = params::PKLine::new("BTCUSDT", "1m", None, None, Some(5));
     /// ```
     pub fn new(
@@ -284,15 +282,6 @@ impl PKLine {
         end_time: Option<u64>,
         limit: Option<u16>,
     ) -> RestResult<Self> {
-        // if let Some(n) = limit {
-        //     if n >= 1000 {
-        //         return Err(RestApiError::ArgumentError(format!(
-        //             "invalid limit `{}', valid limit(<= 1000)",
-        //             n
-        //         )));
-        //     }
-        // }
-
         if let (Some(s), Some(e)) = (start_time, end_time) {
             if s >= e {
                 return Err(RestApiError::ArgumentError(format!(
@@ -308,28 +297,6 @@ impl PKLine {
             start_time,
             end_time,
             limit,
-        })
-    }
-
-    /// 生成请求最近n根K线的请求参数
-    /// ```rust
-    /// use ba_api::client::params;
-    ///
-    /// let pkline = params::PKLine::latest_n("BTCUSDT", "1m", 5);
-    /// ```
-    pub fn latest_n(symbol: &str, interval: &str, limit: u16) -> RestResult<Self> {
-        // if limit >= 1000 {
-        //     return Err(RestApiError::ArgumentError(format!(
-        //         "invalid limit `{}', valid limit(<= 1000)",
-        //         limit
-        //     )));
-        // }
-        Ok(Self {
-            symbol: symbol.to_uppercase(),
-            interval: KLineInterval::from(interval),
-            start_time: None,
-            end_time: None,
-            limit: Some(limit),
         })
     }
 }
