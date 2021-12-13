@@ -8,8 +8,9 @@ use super::{
 use crate::{
     errors::RestResult,
     types::{
-        account::{Account, ListenKey, RateLimitInfo},
+        account::{Account, ListenKey},
         order::{CancelOpenOrdersInfo, CancelOrderInfo, MyTrades, Order, OrderInfo},
+        rate_limit::RateLimitInfo,
     },
 };
 use serde::Serialize;
@@ -28,8 +29,8 @@ impl RestConn {
         Ok(account_info)
     }
 
-    /// 现货下单接口  
-    /// side: 不区分大小的 buy/sell  
+    /// 现货下单接口
+    /// side: 不区分大小的 buy/sell
     /// order_type: 订单类型，值为以下几种不区分大小写的值，不同类型的订单，强制要求提供的参数不同
     ///   - Limit(限价单)
     ///   - Market(市价单)
@@ -37,14 +38,14 @@ impl RestConn {
     ///   - StopLossLimit(限价止损单)
     ///   - TakeProfit(止盈单)
     ///   - TakeProfitLimit(限价止盈单)
-    ///   - LimitMaker(限价只挂单)  
+    ///   - LimitMaker(限价只挂单)
     ///
-    /// time_in_force: 订单有效方式，不区分大小写的 gtc/ioc/fok  
-    /// qty: 币的数量  
-    /// quote_order_qty：市价单中，报价资产的数量。例如买入BTCUSDT时，表示买入多少USDT的BTC  
-    /// stop_price: 止盈止损单的止盈止损价  
-    /// iceberg_qty: Limit和LimitMaker单时指定该参数，表示变成冰山单，此时time_in_force必须为GTC类型  
-    /// new_order_resp_type: 指定下单后的响应信息的详细程度，值为不区分大小写的 ack/result/full  
+    /// time_in_force: 订单有效方式，不区分大小写的 gtc/ioc/fok
+    /// qty: 币的数量
+    /// quote_order_qty：市价单中，报价资产的数量。例如买入BTCUSDT时，表示买入多少USDT的BTC
+    /// stop_price: 止盈止损单的止盈止损价
+    /// iceberg_qty: Limit和LimitMaker单时指定该参数，表示变成冰山单，此时time_in_force必须为GTC类型
+    /// new_order_resp_type: 指定下单后的响应信息的详细程度，值为不区分大小写的 ack/result/full
     #[allow(clippy::too_many_arguments)]
     #[instrument(skip(self))]
     pub async fn order(
@@ -80,12 +81,12 @@ impl RestConn {
         Ok(order_info)
     }
 
-    /// 限价单接口  
-    /// side: 不区分大小写的 buy/sell  
-    /// price: 买入或卖出的挂单价格  
-    /// qty:   
-    ///   - 当side为买入时，表示买入报价资产的数量，将自动根据price参数的值转换为币的数量。例如要买入BTCUSDT，该数量表示要买入多少USDT的BTC  
-    ///   - 当side为卖出时，表示要卖出的币的数量  
+    /// 限价单接口
+    /// side: 不区分大小写的 buy/sell
+    /// price: 买入或卖出的挂单价格
+    /// qty:
+    ///   - 当side为买入时，表示买入报价资产的数量，将自动根据price参数的值转换为币的数量。例如要买入BTCUSDT，该数量表示要买入多少USDT的BTC
+    ///   - 当side为卖出时，表示要卖出的币的数量
     #[instrument(skip(self))]
     pub async fn limit_order(
         &self,
@@ -118,7 +119,7 @@ impl RestConn {
         Ok(order)
     }
 
-    /// 撤单  
+    /// 撤单
     /// order_id和orig_client_order_id必须指定一个，指定前者表示根据order_id进行撤单，指定后者表示根据订单的client_order_id进行撤单。new_client_order_id是为当前撤单操作指定一个client_order_id，若省略则自动生成
     #[instrument(skip(self))]
     pub async fn cancel_order(

@@ -7,3 +7,4 @@ pub mod ws_response;
 pub mod depth;
 pub mod symbol_info;
 pub mod ticker;
+pub mod rate_limit;

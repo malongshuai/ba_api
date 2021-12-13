@@ -1,10 +1,7 @@
 use crate::client::string_to_f64;
 use serde::{Deserialize, Serialize};
 
-use super::{
-    account::{Permission, RateLimit},
-    order::OrderType,
-};
+use super::{account::Permission, order::OrderType, rate_limit::RateLimit};
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -95,8 +92,10 @@ pub enum SymbolFilter {
 pub struct SymbolInfo {
     pub symbol: String,
     pub status: SymbolStatus,
+    /// 例如对于BTCUSDT来说，base_asset是BTC
     pub base_asset: String,
     pub base_asset_precision: u8,
+    /// 例如对于BTCUSDT来说，quote_asset是USDT
     pub quote_asset: String,
     pub quote_precision: u8,
     /// 替代quote_precision字段
@@ -110,7 +109,7 @@ pub struct SymbolInfo {
     pub is_spot_trading_allowed: bool,
     pub is_margin_trading_allowed: bool,
     pub filters: Vec<SymbolFilter>,
-    /// 目前只有两种值，spot/margin，未来会替代is_(spot|margin)_trading_allowed字段
+    /// 未来会替代is_(spot|margin)_trading_allowed字段
     pub permissions: Vec<Permission>,
 }
 

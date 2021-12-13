@@ -1,13 +1,14 @@
 use crate::client::string_to_f64;
 use serde::{Deserialize, Serialize};
 
-
 /// 交易权限
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum Permission {
     Spot,
     Margin,
+    Futures,
+    Leveraged,
 }
 
 /// 账户类型
@@ -104,7 +105,7 @@ pub struct Account {
     pub buyer_fee: u16,
     #[serde(rename = "sellerCommission")]
     pub seller_fee: u16,
-    
+
     /// 能否交易
     pub can_trade: bool,
     /// 能否提现
@@ -117,41 +118,6 @@ pub struct Account {
     pub balances: Balances,
     /// 账户权限
     pub permissions: Vec<Permission>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum RateLimitType {
-    RequestWeight,
-    Orders,
-    RawRequests,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum RateLimitInterVal {
-    Second,
-    Minute,
-    Day,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RateLimit {
-    pub rate_limit_type: RateLimitType,
-    pub interval: RateLimitInterVal,
-    pub interval_num: u32,
-    pub limit: u32,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RateLimitInfo {
-    pub rate_limit_type: RateLimitType,
-    pub interval: RateLimitInterVal,
-    pub interval_num: u32,
-    pub limit: u32,
-    pub count: u32,
 }
 
 #[derive(Debug, Deserialize, Serialize)]

@@ -48,12 +48,12 @@ impl WS {
 
     /// 建立ws连接，并处理返回数据  
     /// 每次调用都只能订阅单个频道(channel参数)  
-    pub async fn new(channel: &str, names: Vec<&str>) -> WsResult<WS> {
+    pub async fn new(channel: &str, names: Vec<String>) -> WsResult<WS> {
         if names.len() > 1024 {
             return Err(WsApiError::TooManySubscribes(names.len()));
         }
 
-        let names = names.iter().map(|x| x.to_string()).collect::<Vec<String>>();
+        let names: Vec<String> = names.iter().map(|x| x.to_string()).collect();
         let url = Self::make_ws_url(channel, &names);
 
         let (ws_stream, _response) = connect_async(&url).await?;
@@ -124,7 +124,7 @@ impl WsClient {
     /// 新建到币安的ws连接客户端，需传入一个mpsc::Receiver来接收连接关闭的通知
     pub async fn new(
         channel: &str,
-        names: Vec<&str>,
+        names: Vec<String>,
         close_receiver: mpsc::Receiver<bool>,
     ) -> WsResult<Self> {
         let ws = WS::new(channel, names).await?;
@@ -244,7 +244,7 @@ impl WsClient {
     /// ```
     pub async fn sub_channel(
         channel: &str,
-        names: Vec<&str>,
+        names: Vec<String>,
         data_sender: mpsc::Sender<String>,
         close_receiver: mpsc::Receiver<bool>,
     ) -> WsResult<()> {
@@ -255,6 +255,7 @@ impl WsClient {
 
     /// 以ws_client的方式订阅"归集交易流"(将"阻塞"当前异步任务)  
     /// 归集交易 stream 推送交易信息，是对单一订单的集合  
+    /// symbols参数忽略大小写  
     /// ```rust
     /// // 收发数据的通道
     /// let (data_tx, mut data_rx) = mpsc::channel::<String>(1000);
@@ -268,21 +269,25 @@ impl WsClient {
         data_sender: mpsc::Sender<String>,
         close_receiver: mpsc::Receiver<bool>,
     ) -> WsResult<()> {
+        let symbols: Vec<String> = symbols.iter().map(|x| x.to_lowercase()).collect();
         Ok(Self::sub_channel("aggTrade", symbols, data_sender, close_receiver).await?)
     }
 
     /// 以ws_client的方式订阅"逐笔交易流"(将"阻塞"当前异步任务)  
-    /// 逐笔交易推送每一笔成交的信息。成交，或者说交易的定义是仅有一个吃单者与一个挂单者相互交易
+    /// 逐笔交易推送每一笔成交的信息。成交，或者说交易的定义是仅有一个吃单者与一个挂单者相互交易  
+    /// symbols参数忽略大小写  
     pub async fn trade(
         symbols: Vec<&str>,
         data_sender: mpsc::Sender<String>,
         close_receiver: mpsc::Receiver<bool>,
     ) -> WsResult<()> {
+        let symbols: Vec<String> = symbols.iter().map(|x| x.to_lowercase()).collect();
         Ok(Self::sub_channel("trade", symbols, data_sender, close_receiver).await?)
     }
 
     /// 以ws_client的方式订阅"K线数据流"(将"阻塞"当前异步任务)  
     /// K线stream逐秒推送所请求的K线种类(最新一根K线)的更新  
+    /// symbols参数忽略大小写  
     /// ```rust
     /// let (data_sender, mut data_receiver) = mpsc::channel::<String>(1000);
     /// let (close_sender, close_receiver) = mpsc::channel::<bool>(1);
@@ -321,18 +326,20 @@ impl WsClient {
                 interval
             );
         }
-
+        let symbols: Vec<String> = symbols.iter().map(|x| x.to_lowercase()).collect();
         let channel = format!("kline_{}", interval);
         Ok(Self::sub_channel(&channel, symbols, data_sender, close_receiver).await?)
     }
 
     /// 以ws_client的方式订阅"按symbol的精简Ticker"(将"阻塞"当前异步任务)  
-    /// 按Symbol刷新的最近24小时精简ticker信息
+    /// 按Symbol刷新的最近24小时精简ticker信息  
+    /// symbols参数忽略大小写  
     pub async fn mini_ticker(
         symbols: Vec<&str>,
         data_sender: mpsc::Sender<String>,
         close_receiver: mpsc::Receiver<bool>,
     ) -> WsResult<()> {
+        let symbols: Vec<String> = symbols.iter().map(|x| x.to_lowercase()).collect();
         Ok(Self::sub_channel("miniTicker", symbols, data_sender, close_receiver).await?)
     }
 
@@ -342,16 +349,24 @@ impl WsClient {
         data_sender: mpsc::Sender<String>,
         close_receiver: mpsc::Receiver<bool>,
     ) -> WsResult<()> {
-        Ok(Self::sub_channel("arr", vec!["!miniTicker"], data_sender, close_receiver).await?)
+        Ok(Self::sub_channel(
+            "arr",
+            vec!["!miniTicker".to_string()],
+            data_sender,
+            close_receiver,
+        )
+        .await?)
     }
 
     /// 以ws_client的方式订阅"按symbol的完整Ticker"(将"阻塞"当前异步任务)  
-    /// 每秒推送单个交易对的过去24小时滚动窗口标签统计信息
+    /// 每秒推送单个交易对的过去24小时滚动窗口标签统计信息  
+    /// symbols参数忽略大小写  
     pub async fn ticker(
         symbols: Vec<&str>,
         data_sender: mpsc::Sender<String>,
         close_receiver: mpsc::Receiver<bool>,
     ) -> WsResult<()> {
+        let symbols: Vec<String> = symbols.iter().map(|x| x.to_lowercase()).collect();
         Ok(Self::sub_channel("miniTicker", symbols, data_sender, close_receiver).await?)
     }
 
@@ -361,16 +376,24 @@ impl WsClient {
         data_sender: mpsc::Sender<String>,
         close_receiver: mpsc::Receiver<bool>,
     ) -> WsResult<()> {
-        Ok(Self::sub_channel("arr", vec!["!ticker"], data_sender, close_receiver).await?)
+        Ok(Self::sub_channel(
+            "arr",
+            vec!["!ticker".to_string()],
+            data_sender,
+            close_receiver,
+        )
+        .await?)
     }
 
     /// 以ws_client的方式订阅"按Symbol的最优挂单信息"(将"阻塞"当前异步任务)  
-    /// 实时推送指定交易对最优挂单信息
+    /// 实时推送指定交易对最优挂单信息  
+    /// symbols参数忽略大小写  
     pub async fn bookticker(
         symbols: Vec<&str>,
         data_sender: mpsc::Sender<String>,
         close_receiver: mpsc::Receiver<bool>,
     ) -> WsResult<()> {
+        let symbols: Vec<String> = symbols.iter().map(|x| x.to_lowercase()).collect();
         Ok(Self::sub_channel("bookTicker", symbols, data_sender, close_receiver).await?)
     }
 
@@ -380,12 +403,13 @@ impl WsClient {
         data_sender: mpsc::Sender<String>,
         close_receiver: mpsc::Receiver<bool>,
     ) -> WsResult<()> {
-        let names: Vec<&str> = vec![];
+        let names: Vec<String> = vec![];
         Ok(Self::sub_channel("!bookTicker", names, data_sender, close_receiver).await?)
     }
 
     /// 以ws_client的方式订阅"有限档深度信息"(将"阻塞"当前异步任务)  
-    /// 每100毫秒推送有限档深度信息。level表示几档买卖单信息, 可选5/10/20档
+    /// 每100毫秒推送有限档深度信息。level表示几档买卖单信息, 可选5/10/20档  
+    /// symbols参数忽略大小写  
     pub async fn depth_with_level(
         symbols: Vec<&str>,
         level: u8,
@@ -395,17 +419,20 @@ impl WsClient {
         if ![5u8, 10u8, 20u8].contains(&level) {
             panic!("argument error: <{}> is not the valid depth level", level)
         }
+        let symbols: Vec<String> = symbols.iter().map(|x| x.to_lowercase()).collect();
         let channel = format!("depth{}@100ms", level);
         Ok(Self::sub_channel(&channel, symbols, data_sender, close_receiver).await?)
     }
 
     /// 以ws_client的方式订阅"增量深度信息"(将"阻塞"当前异步任务)  
-    /// 每100毫秒推送orderbook的变化部分(如果有)
+    /// 每100毫秒推送orderbook的变化部分(如果有)  
+    /// symbols参数忽略大小写  
     pub async fn depth_incr(
         symbols: Vec<&str>,
         data_sender: mpsc::Sender<String>,
         close_receiver: mpsc::Receiver<bool>,
     ) -> WsResult<()> {
+        let symbols: Vec<String> = symbols.iter().map(|x| x.to_lowercase()).collect();
         Ok(Self::sub_channel("depth@100ms", symbols, data_sender, close_receiver).await?)
     }
 

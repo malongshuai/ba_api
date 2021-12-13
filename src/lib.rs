@@ -7,6 +7,7 @@ pub use types::depth::*;
 pub use types::kline::*;
 pub use types::kline_interval::KLineInterval;
 pub use types::order::*;
+pub use types::rate_limit::*;
 pub use types::other_types::*;
 pub use types::symbol_info::*;
 pub use types::ticker::*;
