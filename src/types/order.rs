@@ -442,7 +442,7 @@ pub struct OrderInfo {
     pub order_list_id: i64,
 
     /// 订单状态
-    pub status: String, // "NEW"
+    pub status: OrderStatus, // "NEW"
 
     /// 订单的时效方式
     pub time_in_force: TimeInForce,

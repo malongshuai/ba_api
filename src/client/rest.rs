@@ -91,21 +91,13 @@ impl RestConn {
     ///let sec_key = "abcdefhijklmnopqrstuvwxyz";
     ///let rest_conn = RestConn::new(api_key, sec_key, Some("http://127.0.0.1:8118"));
     ///```
-    pub fn new(
-        api_key: &'static str,
-        sec_key: &'static str,
-        proxy: Option<&str>,
-        base_url: Option<&str>,
-    ) -> RestConn {
+    pub fn new(api_key: &'static str, sec_key: &'static str, proxy: Option<&str>) -> RestConn {
         let mut header = header::HeaderMap::new();
         header.insert("X-MBX-APIKEY", header::HeaderValue::from_static(api_key));
 
         let builder = reqwest::Client::builder().default_headers(header);
-        let url = if let Some(a) = base_url {
-            a
-        } else {
-            REST_BASE_URL
-        };
+        let url = *REST_BASE_URL;
+
         match proxy {
             Some(prx) => {
                 let p = reqwest::Proxy::all(prx).expect("proxy error!");
