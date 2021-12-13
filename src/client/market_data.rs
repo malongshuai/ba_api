@@ -1,3 +1,5 @@
+use std::time::SystemTime;
+
 use tracing::instrument;
 
 use crate::errors::RestResult;
@@ -106,10 +108,13 @@ impl RestConn {
     }
 
     /// 获取K线列表  
-    /// interval: 1m 3m 5m 15m 30m 1h 2h 4h 6h 8h 12h 1d 3d 1w 1M  
-    /// limit为None时默认返回最近500条信息，最大值1000  
-    /// start_time太小时，自动调整为币安的第一根K线时间  
-    /// end_time太大时，最多返回到当前的K线结束  
+    /// 
+    /// interval: 1m 3m 5m 15m 30m 1h 2h 4h 6h 8h 12h 1d 3d 1w 1M，  
+    /// limit为None时默认返回最近500条信息，最大值1000，  
+    /// start_time太小时，自动调整为币安的第一根K线时间，  
+    /// end_time太大时，最多返回到当前的K线结束，  
+    /// 注：如果获取的是最近的K线，对于最后一根K线是否finish，有最多3秒的延迟期。建议丢掉最近的最后一根K线，或者总是将其当作未完成的K线来看待。  
+    /// 例如，最后一根K线是某分钟00秒 01秒 02秒时获取到的，则也认为这根K线是未完成的  
     #[instrument(skip(self))]
     pub async fn klines(
         &self,
@@ -122,7 +127,24 @@ impl RestConn {
         let path = "/api/v3/klines";
         let params = PKLine::new(symbol, interval, start_time, end_time, limit)?;
         let res = self.rest_req("get", path, params).await?;
-        let klines = serde_json::from_str::<KLines>(&res)?;
+        let mut klines = serde_json::from_str::<KLines>(&res)?;
+
+        for kl in &mut klines {
+          kl.symbol = symbol.to_string();
+        }
+
+        // 如果最后一根K线的close_epoch大于当前时间(延迟3秒)，则认为这根K线未完成
+        if !klines.is_empty() {
+            let now = SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_millis();
+            let last_close_epoch = klines.last().unwrap().close_epoch;
+            if now < (last_close_epoch as u128) + 3000 {
+                klines.last_mut().unwrap().finished = false;
+            }
+        }
+
         Ok(klines)
     }
 

@@ -1,12 +1,12 @@
-use crate::errors::{MethodError, RestApiError, RestResult};
+use crate::{
+    errors::{BadRequest, MethodError, RestApiError, RestResult},
+    REST_BASE_URL,
+};
 use reqwest::{header, Url};
 use serde::Serialize;
 use std::{fmt::Debug, str::FromStr};
 
 use super::params::{CheckType, Param};
-
-/// 币安的Base URL: <https://api.binance.com>
-pub const BASE_URL: &str = "https://api.binance.com";
 
 /// REST响应体
 pub(crate) type RespBody = String;
@@ -30,7 +30,7 @@ mod helper {
         let sign = hmac::sign(&sign_key, obj_bytes);
         hex::encode(sign)
     }
-    
+
     #[test]
     fn test_signature() {
         let key = "NhqPtmdSJYdKjVHjA7PZj4Mge3R5YNiP1e3UZjInClVN65XAbvqqM6A7H5fATj0j";
@@ -76,7 +76,7 @@ impl FromStr for RestMethod {
 }
 
 /// 已建立好的Http连接客户端(reqwest::Client)
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RestConn {
     conn: reqwest::Client,
     api_key: String,
@@ -91,12 +91,21 @@ impl RestConn {
     ///let sec_key = "abcdefhijklmnopqrstuvwxyz";
     ///let rest_conn = RestConn::new(api_key, sec_key, Some("http://127.0.0.1:8118"));
     ///```
-    pub fn new(api_key: &'static str, sec_key: &'static str, proxy: Option<&str>) -> RestConn {
+    pub fn new(
+        api_key: &'static str,
+        sec_key: &'static str,
+        proxy: Option<&str>,
+        base_url: Option<&str>,
+    ) -> RestConn {
         let mut header = header::HeaderMap::new();
         header.insert("X-MBX-APIKEY", header::HeaderValue::from_static(api_key));
 
         let builder = reqwest::Client::builder().default_headers(header);
-
+        let url = if let Some(a) = base_url {
+            a
+        } else {
+            REST_BASE_URL
+        };
         match proxy {
             Some(prx) => {
                 let p = reqwest::Proxy::all(prx).expect("proxy error!");
@@ -104,14 +113,14 @@ impl RestConn {
                     conn: builder.proxy(p).build().unwrap(),
                     api_key: api_key.to_string(),
                     sec_key: sec_key.to_string(),
-                    base_url: Url::parse(BASE_URL).unwrap(),
+                    base_url: Url::parse(url).unwrap(),
                 }
             }
             None => Self {
                 conn: builder.build().unwrap(),
                 api_key: api_key.to_string(),
                 sec_key: sec_key.to_string(),
-                base_url: Url::parse(BASE_URL).unwrap(),
+                base_url: Url::parse(url).unwrap(),
             },
         }
     }
@@ -121,13 +130,19 @@ impl RestConn {
         if status_code >= 300 {
             let e = if status_code >= 500 {
                 RestApiError::ServerError(resp.text().await.unwrap_or_default())
+            } else if status_code == 400 {
+                let resp_test = resp.text().await.unwrap_or_default();
+                match serde_json::from_str::<BadRequest>(resp_test.as_str()) {
+                    Ok(error) => RestApiError::BadRequest(error.code, error.msg),
+                    Err(_) => RestApiError::ClientError(resp_test),
+                }
+            } else if status_code == 403 {
+                RestApiError::Waf
             } else if status_code == 418 {
                 RestApiError::Blocked
             } else if status_code == 429 {
                 RestApiError::WafWarning
-            } else if status_code == 403 {
-                RestApiError::Waf
-            } else if status_code >= 400 {
+            } else if status_code > 400 {
                 RestApiError::ClientError(resp.text().await.unwrap_or_default())
             } else {
                 RestApiError::Unknown(resp.text().await.unwrap_or_default())

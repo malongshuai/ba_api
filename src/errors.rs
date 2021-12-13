@@ -1,4 +1,5 @@
 use std::fmt::Display;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio_tungstenite::tungstenite;
 
@@ -6,6 +7,9 @@ use tokio_tungstenite::tungstenite;
 pub enum RestApiError {
     #[error("4xx client error: {0}")]
     ClientError(String),
+
+    #[error("400 Bad Request, code: {0}, msg: {1}")]
+    BadRequest(i32, String),
 
     #[error("5xx server error: {0}")]
     ServerError(String),
@@ -39,6 +43,12 @@ pub type RestResult<T> = Result<T, RestApiError>;
 
 #[derive(Debug, Error)]
 pub struct MethodError {
+    pub msg: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct BadRequest {
+    pub code: i32,
     pub msg: String,
 }
 

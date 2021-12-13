@@ -14,12 +14,10 @@ use tracing::{debug, error};
 
 use crate::{
     errors::{WsApiError, WsResult},
-    KLineInterval,
+    KLineInterval, WS_BASE_URL,
 };
 
 type WsStream = WebSocketStream<MaybeTlsStream<TcpStream>>;
-
-pub const BASE_URL: &str = "wss://stream.binance.com:9443";
 
 /// 内部ws连接，只支持订阅组合Stream(参考<https://binance-docs.github.io/apidocs/spot/cn/#websocket>)
 #[derive(Debug)]
@@ -32,7 +30,7 @@ pub struct WS {
 }
 
 impl WS {
-    fn make_ws_url(channel: &str, name: &[String]) -> String {
+    fn make_ws_url(channel: &str, name: &[String], base_url: &str) -> String {
         let streams = if name.is_empty() {
             channel.to_string()
         } else {
@@ -43,18 +41,23 @@ impl WS {
             metadata.join("/")
         };
 
-        format!("{}/stream?streams={}", BASE_URL, streams)
+        format!("{}/stream?streams={}", base_url, streams)
     }
 
     /// 建立ws连接，并处理返回数据  
     /// 每次调用都只能订阅单个频道(channel参数)  
-    pub async fn new(channel: &str, names: Vec<String>) -> WsResult<WS> {
+    pub async fn new(channel: &str, names: Vec<String>, ws_base_url: Option<&str>) -> WsResult<WS> {
         if names.len() > 1024 {
             return Err(WsApiError::TooManySubscribes(names.len()));
         }
 
+        let base_url = if let Some(a) = ws_base_url {
+            a
+        } else {
+            WS_BASE_URL
+        };
         let names: Vec<String> = names.iter().map(|x| x.to_string()).collect();
-        let url = Self::make_ws_url(channel, &names);
+        let url = Self::make_ws_url(channel, &names, base_url);
 
         let (ws_stream, _response) = connect_async(&url).await?;
 
@@ -64,11 +67,6 @@ impl WS {
             channel: channel.to_string(),
             url,
         })
-    }
-
-    /// 获取该ws连接的ws URL
-    pub fn get_url(&self) -> String {
-        Self::make_ws_url(&self.channel, &self.names)
     }
 
     /// 创建一个新的WebSocketStream，并将其替换该ws连接内部已有的WebSocketStream  
@@ -92,7 +90,8 @@ impl WS {
 /// ws连接，只支持订阅组合Stream(参考<https://binance-docs.github.io/apidocs/spot/cn/#websocket>)
 /// ```rust
 /// let (data_tx, mut data_rx) = mpsc::channel::<String>(1000);
-/// let (mut wsc, close_sender) = WsClient::new("kline_1m", vec!["btcusdt", "ethusdt"]).await.unwrap();
+/// let (close_sender, mut close_receiver) = mpsc::channel::<bool>(1);
+/// let mut wsc= WsClient::new("kline_1m", vec!["btcusdt", "ethusdt"], None, close_receiver).await.unwrap();
 ///
 /// // 接收数据
 /// tokio::spawn(async move {
@@ -118,6 +117,8 @@ pub struct WsClient {
     pub channel: String,
     /// 该ws订阅的频道
     pub names: Vec<String>,
+    /// 该ws的URL
+    pub url: String,
 }
 
 impl WsClient {
@@ -125,28 +126,26 @@ impl WsClient {
     pub async fn new(
         channel: &str,
         names: Vec<String>,
+        ws_base_url: Option<&str>,
         close_receiver: mpsc::Receiver<bool>,
     ) -> WsResult<Self> {
-        let ws = WS::new(channel, names).await?;
+        let ws = WS::new(channel, names, ws_base_url).await?;
         let names = ws.names.clone();
+        let url = ws.url.clone();
 
         Ok(Self {
             ws,
             rx: close_receiver,
             channel: channel.to_string(),
             names,
+            url,
         })
-    }
-
-    /// 获取该ws连接的ws URL
-    pub fn get_url(&self) -> String {
-        WS::make_ws_url(&self.channel, &self.names)
     }
 
     /// 需结合ws_client使用，强制或不强制关闭ws client
     /// ```rust
     /// let (close_sender, close_rx) = mpsc::channel::<bool>(1);
-    /// let mut wsc = WsClient::new("kline_1m", vec!["btcusdt", "ethusdt"], close_rx).await.unwrap();
+    /// let mut wsc = WsClient::new("kline_1m", vec!["btcusdt", "ethusdt"], None, close_rx).await.unwrap();
     ///
     /// // 不强制关闭ws，只是关闭到币安的连接，但会自动重建连接
     /// WsClient::close_client(close_sender.clone(), false);
@@ -245,10 +244,11 @@ impl WsClient {
     pub async fn sub_channel(
         channel: &str,
         names: Vec<String>,
+        ws_base_url: Option<&str>,
         data_sender: mpsc::Sender<String>,
         close_receiver: mpsc::Receiver<bool>,
     ) -> WsResult<()> {
-        let mut wsc = Self::new(channel, names, close_receiver).await?;
+        let mut wsc = Self::new(channel, names, ws_base_url, close_receiver).await?;
         wsc.ws_client(data_sender).await?;
         Ok(())
     }
@@ -262,15 +262,23 @@ impl WsClient {
     /// // 收发关闭连接通知的通道
     /// let (close_sender, close_receiver) = mpsc::channel::<bool>(1);
     ///
-    /// WsClient::agg_trade(vec!["btcusdt", "ethusdt"], data_tx, close_receiver);
+    /// WsClient::agg_trade(vec!["btcusdt", "ethusdt"], None, data_tx, close_receiver);
     /// ```
     pub async fn agg_trade(
         symbols: Vec<&str>,
+        ws_base_url: Option<&str>,
         data_sender: mpsc::Sender<String>,
         close_receiver: mpsc::Receiver<bool>,
     ) -> WsResult<()> {
         let symbols: Vec<String> = symbols.iter().map(|x| x.to_lowercase()).collect();
-        Ok(Self::sub_channel("aggTrade", symbols, data_sender, close_receiver).await?)
+        Ok(Self::sub_channel(
+            "aggTrade",
+            symbols,
+            ws_base_url,
+            data_sender,
+            close_receiver,
+        )
+        .await?)
     }
 
     /// 以ws_client的方式订阅"逐笔交易流"(将"阻塞"当前异步任务)  
@@ -278,11 +286,12 @@ impl WsClient {
     /// symbols参数忽略大小写  
     pub async fn trade(
         symbols: Vec<&str>,
+        ws_base_url: Option<&str>,
         data_sender: mpsc::Sender<String>,
         close_receiver: mpsc::Receiver<bool>,
     ) -> WsResult<()> {
         let symbols: Vec<String> = symbols.iter().map(|x| x.to_lowercase()).collect();
-        Ok(Self::sub_channel("trade", symbols, data_sender, close_receiver).await?)
+        Ok(Self::sub_channel("trade", symbols, ws_base_url, data_sender, close_receiver).await?)
     }
 
     /// 以ws_client的方式订阅"K线数据流"(将"阻塞"当前异步任务)  
@@ -308,6 +317,7 @@ impl WsClient {
     /// WsClient::kline(
     ///     "1m",
     ///     vec!["btcusdt", "ethusdt"],
+    ///     None,
     ///     data_sender,
     ///     close_receiver,
     /// )
@@ -317,6 +327,7 @@ impl WsClient {
     pub async fn kline(
         interval: &str,
         symbols: Vec<&str>,
+        ws_base_url: Option<&str>,
         data_sender: mpsc::Sender<String>,
         close_receiver: mpsc::Receiver<bool>,
     ) -> WsResult<()> {
@@ -328,7 +339,7 @@ impl WsClient {
         }
         let symbols: Vec<String> = symbols.iter().map(|x| x.to_lowercase()).collect();
         let channel = format!("kline_{}", interval);
-        Ok(Self::sub_channel(&channel, symbols, data_sender, close_receiver).await?)
+        Ok(Self::sub_channel(&channel, symbols, ws_base_url, data_sender, close_receiver).await?)
     }
 
     /// 以ws_client的方式订阅"按symbol的精简Ticker"(将"阻塞"当前异步任务)  
@@ -336,22 +347,32 @@ impl WsClient {
     /// symbols参数忽略大小写  
     pub async fn mini_ticker(
         symbols: Vec<&str>,
+        ws_base_url: Option<&str>,
         data_sender: mpsc::Sender<String>,
         close_receiver: mpsc::Receiver<bool>,
     ) -> WsResult<()> {
         let symbols: Vec<String> = symbols.iter().map(|x| x.to_lowercase()).collect();
-        Ok(Self::sub_channel("miniTicker", symbols, data_sender, close_receiver).await?)
+        Ok(Self::sub_channel(
+            "miniTicker",
+            symbols,
+            ws_base_url,
+            data_sender,
+            close_receiver,
+        )
+        .await?)
     }
 
     /// 以ws_client的方式订阅"全市场所有Symbol的精简Ticker"(将"阻塞"当前异步任务)  
     /// 推送所有交易对的最近24小时精简ticker信息.需注意，只有更新的ticker才会被推送
     pub async fn all_mini_ticker(
+        ws_base_url: Option<&str>,
         data_sender: mpsc::Sender<String>,
         close_receiver: mpsc::Receiver<bool>,
     ) -> WsResult<()> {
         Ok(Self::sub_channel(
             "arr",
             vec!["!miniTicker".to_string()],
+            ws_base_url,
             data_sender,
             close_receiver,
         )
@@ -363,22 +384,32 @@ impl WsClient {
     /// symbols参数忽略大小写  
     pub async fn ticker(
         symbols: Vec<&str>,
+        ws_base_url: Option<&str>,
         data_sender: mpsc::Sender<String>,
         close_receiver: mpsc::Receiver<bool>,
     ) -> WsResult<()> {
         let symbols: Vec<String> = symbols.iter().map(|x| x.to_lowercase()).collect();
-        Ok(Self::sub_channel("miniTicker", symbols, data_sender, close_receiver).await?)
+        Ok(Self::sub_channel(
+            "miniTicker",
+            symbols,
+            ws_base_url,
+            data_sender,
+            close_receiver,
+        )
+        .await?)
     }
 
     /// 以ws_client的方式订阅"全市场所有Symbol的完整Ticker"(将"阻塞"当前异步任务)  
     /// 推送所有交易对的最近24小时完整ticker信息.需注意，只有更新的ticker才会被推送
     pub async fn all_ticker(
+        ws_base_url: Option<&str>,
         data_sender: mpsc::Sender<String>,
         close_receiver: mpsc::Receiver<bool>,
     ) -> WsResult<()> {
         Ok(Self::sub_channel(
             "arr",
             vec!["!ticker".to_string()],
+            ws_base_url,
             data_sender,
             close_receiver,
         )
@@ -390,21 +421,37 @@ impl WsClient {
     /// symbols参数忽略大小写  
     pub async fn bookticker(
         symbols: Vec<&str>,
+        ws_base_url: Option<&str>,
         data_sender: mpsc::Sender<String>,
         close_receiver: mpsc::Receiver<bool>,
     ) -> WsResult<()> {
         let symbols: Vec<String> = symbols.iter().map(|x| x.to_lowercase()).collect();
-        Ok(Self::sub_channel("bookTicker", symbols, data_sender, close_receiver).await?)
+        Ok(Self::sub_channel(
+            "bookTicker",
+            symbols,
+            ws_base_url,
+            data_sender,
+            close_receiver,
+        )
+        .await?)
     }
 
     /// 以ws_client的方式订阅"全市场最优挂单信息"(将"阻塞"当前异步任务)  
     /// 实时推送所有交易对最优挂单信息
     pub async fn all_bookticker(
+        ws_base_url: Option<&str>,
         data_sender: mpsc::Sender<String>,
         close_receiver: mpsc::Receiver<bool>,
     ) -> WsResult<()> {
         let names: Vec<String> = vec![];
-        Ok(Self::sub_channel("!bookTicker", names, data_sender, close_receiver).await?)
+        Ok(Self::sub_channel(
+            "!bookTicker",
+            names,
+            ws_base_url,
+            data_sender,
+            close_receiver,
+        )
+        .await?)
     }
 
     /// 以ws_client的方式订阅"有限档深度信息"(将"阻塞"当前异步任务)  
@@ -412,6 +459,7 @@ impl WsClient {
     /// symbols参数忽略大小写  
     pub async fn depth_with_level(
         symbols: Vec<&str>,
+        ws_base_url: Option<&str>,
         level: u8,
         data_sender: mpsc::Sender<String>,
         close_receiver: mpsc::Receiver<bool>,
@@ -421,7 +469,7 @@ impl WsClient {
         }
         let symbols: Vec<String> = symbols.iter().map(|x| x.to_lowercase()).collect();
         let channel = format!("depth{}@100ms", level);
-        Ok(Self::sub_channel(&channel, symbols, data_sender, close_receiver).await?)
+        Ok(Self::sub_channel(&channel, symbols, ws_base_url, data_sender, close_receiver).await?)
     }
 
     /// 以ws_client的方式订阅"增量深度信息"(将"阻塞"当前异步任务)  
@@ -429,11 +477,19 @@ impl WsClient {
     /// symbols参数忽略大小写  
     pub async fn depth_incr(
         symbols: Vec<&str>,
+        ws_base_url: Option<&str>,
         data_sender: mpsc::Sender<String>,
         close_receiver: mpsc::Receiver<bool>,
     ) -> WsResult<()> {
         let symbols: Vec<String> = symbols.iter().map(|x| x.to_lowercase()).collect();
-        Ok(Self::sub_channel("depth@100ms", symbols, data_sender, close_receiver).await?)
+        Ok(Self::sub_channel(
+            "depth@100ms",
+            symbols,
+            ws_base_url,
+            data_sender,
+            close_receiver,
+        )
+        .await?)
     }
 
     /// 以ws_client的方式订阅"Websocket账户信息推送"(将"阻塞"当前异步任务)  
@@ -441,9 +497,17 @@ impl WsClient {
     /// 包括账户更新、余额更新、订单更新，参考(<https://binance-docs.github.io/apidocs/spot/cn/#websocket-2>)  
     pub async fn account(
         listen_key: String,
+        ws_base_url: Option<&str>,
         data_sender: mpsc::Sender<String>,
         close_receiver: mpsc::Receiver<bool>,
     ) -> WsResult<()> {
-        Ok(Self::sub_channel(&listen_key, vec![], data_sender, close_receiver).await?)
+        Ok(Self::sub_channel(
+            &listen_key,
+            vec![],
+            ws_base_url,
+            data_sender,
+            close_receiver,
+        )
+        .await?)
     }
 }

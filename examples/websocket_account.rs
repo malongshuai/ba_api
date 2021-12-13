@@ -21,7 +21,7 @@ async fn main() {
 #[allow(dead_code)]
 async fn websocket() {
     // 创建http连接
-    let rest_conn = RestConn::new(API_KEY, SEC_KEY, Some("http://127.0.0.1:8118"));
+    let rest_conn = RestConn::new(API_KEY, SEC_KEY, Some("http://127.0.0.1:8118"), None);
 
     // 生成一个ListenKey以便使用websocket订阅账户更新信息
     let listen_key = rest_conn.new_spot_listen_key().await.unwrap();
@@ -48,7 +48,7 @@ async fn websocket() {
     });
 
     // 订阅币安的账户更新通道，币安推送的余额更新、订单更新信息等都将会接收到，并通过data_sender发送出去(发送的是String类型)
-    WsClient::account(listen_key, data_sender, close_receiver)
+    WsClient::account(listen_key, None, data_sender, close_receiver)
         .await
         .unwrap();
 }

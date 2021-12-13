@@ -18,7 +18,7 @@ pub struct AvgPrice {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum Prices {
-    P(Price),
+    Price(Price),
     Prices(Vec<Price>),
 }
 

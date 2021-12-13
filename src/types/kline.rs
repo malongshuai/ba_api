@@ -16,6 +16,8 @@ pub struct KLine {
     pub epoch: u64,
     /// 收盘时间
     pub close_epoch: u64,
+    /// 该K线是否已经收盘
+    pub finished: bool,
     /// 开盘价
     pub open: f64,
     /// 最高价
@@ -53,6 +55,7 @@ impl From<WrapKLine> for KLine {
                 count: data.count,
                 amount: data.amount,
                 vol: data.vol,
+                finished: true,
             },
             WrapKLine::WebSocketKLine(data) => Self {
                 symbol: data.kline.symbol,
@@ -65,6 +68,7 @@ impl From<WrapKLine> for KLine {
                 count: data.kline.count,
                 amount: data.kline.amount,
                 vol: data.kline.vol,
+                finished: data.kline.finish
             },
         }
     }
@@ -93,23 +97,6 @@ struct RestKLine {
     buy_vol: f64,
     #[serde(deserialize_with = "string_to_f64")]
     ignore: f64,
-}
-
-impl From<RestKLine> for KLine {
-    fn from(data: RestKLine) -> Self {
-        Self {
-            symbol: String::new(),
-            epoch: data.epoch,
-            close_epoch: data.close_epoch,
-            high: data.high,
-            close: data.close,
-            low: data.low,
-            open: data.open,
-            count: data.count,
-            amount: data.amount,
-            vol: data.vol,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -156,23 +143,6 @@ struct WebSocketRawKLine {
 struct WebSocketKLine {
     #[serde(rename = "k")]
     kline: WebSocketRawKLine,
-}
-
-impl From<WebSocketKLine> for KLine {
-    fn from(data: WebSocketKLine) -> Self {
-        Self {
-            symbol: data.kline.symbol,
-            epoch: data.kline.epoch,
-            close_epoch: data.kline.close_epoch,
-            high: data.kline.high,
-            close: data.kline.close,
-            low: data.kline.low,
-            open: data.kline.open,
-            count: data.kline.count,
-            amount: data.kline.amount,
-            vol: data.kline.vol,
-        }
-    }
 }
 
 #[cfg(test)]
