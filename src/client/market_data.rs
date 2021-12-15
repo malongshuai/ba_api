@@ -8,7 +8,7 @@ use crate::types::order::{AggTrade, HistoricalTrade, Trade};
 use crate::types::other_types::{AvgPrice, Prices, ServerTime};
 use crate::types::symbol_info::ExchangeInfo;
 use crate::types::ticker::{BookTickers, FullTickers};
-use crate::KLines;
+use crate::{KLineInterval, KLines};
 
 use super::params::{
     PAggTrades, PAvgPrice, PBookTicker, PDepth, PExchangeInfo, PHistoricalTrades, PHr24, PKLine,
@@ -131,6 +131,7 @@ impl RestConn {
 
         for kl in &mut klines {
           kl.symbol = symbol.to_string();
+          kl.interval = KLineInterval::from(interval);
         }
 
         // 如果最后一根K线的close_epoch大于当前时间(延迟3秒)，则认为这根K线未完成
@@ -141,7 +142,7 @@ impl RestConn {
                 .as_millis();
             let last_close_epoch = klines.last().unwrap().close_epoch;
             if now < (last_close_epoch as u128) + 3000 {
-                klines.last_mut().unwrap().finished = false;
+                klines.last_mut().unwrap().finish = false;
             }
         }
 

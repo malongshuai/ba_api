@@ -259,7 +259,7 @@ impl WsClient {
     /// WsClient::agg_trade(vec!["btcusdt", "ethusdt"], data_tx, close_receiver);
     /// ```
     pub async fn agg_trade(
-        symbols: Vec<&str>,
+        symbols: Vec<String>,
         data_sender: mpsc::Sender<String>,
         close_receiver: mpsc::Receiver<bool>,
     ) -> WsResult<()> {
@@ -271,7 +271,7 @@ impl WsClient {
     /// 逐笔交易推送每一笔成交的信息。成交，或者说交易的定义是仅有一个吃单者与一个挂单者相互交易  
     /// symbols参数忽略大小写  
     pub async fn trade(
-        symbols: Vec<&str>,
+        symbols: Vec<String>,
         data_sender: mpsc::Sender<String>,
         close_receiver: mpsc::Receiver<bool>,
     ) -> WsResult<()> {
@@ -310,7 +310,7 @@ impl WsClient {
     /// ```
     pub async fn kline(
         interval: &str,
-        symbols: Vec<&str>,
+        symbols: Vec<String>,
         data_sender: mpsc::Sender<String>,
         close_receiver: mpsc::Receiver<bool>,
     ) -> WsResult<()> {
@@ -329,7 +329,7 @@ impl WsClient {
     /// 按Symbol刷新的最近24小时精简ticker信息  
     /// symbols参数忽略大小写  
     pub async fn mini_ticker(
-        symbols: Vec<&str>,
+        symbols: Vec<String>,
         data_sender: mpsc::Sender<String>,
         close_receiver: mpsc::Receiver<bool>,
     ) -> WsResult<()> {
@@ -356,7 +356,7 @@ impl WsClient {
     /// 每秒推送单个交易对的过去24小时滚动窗口标签统计信息  
     /// symbols参数忽略大小写  
     pub async fn ticker(
-        symbols: Vec<&str>,
+        symbols: Vec<String>,
         data_sender: mpsc::Sender<String>,
         close_receiver: mpsc::Receiver<bool>,
     ) -> WsResult<()> {
@@ -383,7 +383,7 @@ impl WsClient {
     /// 实时推送指定交易对最优挂单信息  
     /// symbols参数忽略大小写  
     pub async fn bookticker(
-        symbols: Vec<&str>,
+        symbols: Vec<String>,
         data_sender: mpsc::Sender<String>,
         close_receiver: mpsc::Receiver<bool>,
     ) -> WsResult<()> {
@@ -405,7 +405,7 @@ impl WsClient {
     /// 每100毫秒推送有限档深度信息。level表示几档买卖单信息, 可选5/10/20档  
     /// symbols参数忽略大小写  
     pub async fn depth_with_level(
-        symbols: Vec<&str>,
+        symbols: Vec<String>,
         level: u8,
         data_sender: mpsc::Sender<String>,
         close_receiver: mpsc::Receiver<bool>,
@@ -422,7 +422,7 @@ impl WsClient {
     /// 每100毫秒推送orderbook的变化部分(如果有)  
     /// symbols参数忽略大小写  
     pub async fn depth_incr(
-        symbols: Vec<&str>,
+        symbols: Vec<String>,
         data_sender: mpsc::Sender<String>,
         close_receiver: mpsc::Receiver<bool>,
     ) -> WsResult<()> {

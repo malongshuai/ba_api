@@ -11,7 +11,7 @@ async fn main() {
         .init();
 
     // 创建http连接
-    let rest_conn = RestConn::new(API_KEY, SEC_KEY, Some("http://127.0.0.1:8118"));
+    let rest_conn = RestConn::new(API_KEY.to_string(), SEC_KEY.to_string(), Some("http://127.0.0.1:8118".to_string()));
 
     // 获取BTCUSDT的最近5根K线
     let x = rest_conn

@@ -12,12 +12,14 @@ pub type KLines = Vec<KLine>;
 pub struct KLine {
     /// 交易对
     pub symbol: String,
+    /// K线间隔
+    pub interval: KLineInterval,
     /// 开盘时间
     pub epoch: u64,
     /// 收盘时间
     pub close_epoch: u64,
     /// 该K线是否已经收盘
-    pub finished: bool,
+    pub finish: bool,
     /// 开盘价
     pub open: f64,
     /// 最高价
@@ -55,7 +57,8 @@ impl From<WrapKLine> for KLine {
                 count: data.count,
                 amount: data.amount,
                 vol: data.vol,
-                finished: true,
+                finish: true,
+                interval: KLineInterval::Min1,
             },
             WrapKLine::WebSocketKLine(data) => Self {
                 symbol: data.kline.symbol,
@@ -68,7 +71,8 @@ impl From<WrapKLine> for KLine {
                 count: data.kline.count,
                 amount: data.kline.amount,
                 vol: data.kline.vol,
-                finished: data.kline.finish
+                finish: data.kline.finish,
+                interval: data.kline.interval,
             },
         }
     }

@@ -5,6 +5,8 @@ use crate::{
 use reqwest::{header, Url};
 use serde::Serialize;
 use std::{fmt::Debug, str::FromStr};
+use tokio::time;
+use tracing::{error, warn};
 
 use super::params::{CheckType, Param};
 
@@ -87,15 +89,23 @@ pub struct RestConn {
 #[allow(dead_code)]
 impl RestConn {
     ///```rust
-    ///let api_key = "abcdefhijklmnopqrstuvwxyz";
-    ///let sec_key = "abcdefhijklmnopqrstuvwxyz";
-    ///let rest_conn = RestConn::new(api_key, sec_key, Some("http://127.0.0.1:8118"));
+    ///let api_key = "abcdefhijklmnopqrstuvwxyz".to_string();
+    ///let sec_key = "abcdefhijklmnopqrstuvwxyz".to_string();
+    ///let rest_conn = RestConn::new(api_key, sec_key, Some("http://127.0.0.1:8118".to_string()));
     ///```
-    pub fn new(api_key: &'static str, sec_key: &'static str, proxy: Option<&str>) -> RestConn {
+    pub fn new(api_key: String, sec_key: String, proxy: Option<String>) -> RestConn {
         let mut header = header::HeaderMap::new();
-        header.insert("X-MBX-APIKEY", header::HeaderValue::from_static(api_key));
+        header.insert(
+            "X-MBX-APIKEY",
+            header::HeaderValue::from_str(&api_key).unwrap(),
+        );
 
-        let builder = reqwest::Client::builder().default_headers(header);
+        // 设置建立连接过程的超时时间5秒
+        // 空闲连接永不断开(一直保持长连接)
+        let builder = reqwest::Client::builder()
+            .default_headers(header)
+            .connect_timeout(time::Duration::from_secs(5))
+            .pool_idle_timeout(None);
         let url = *REST_BASE_URL;
 
         match proxy {
@@ -103,15 +113,15 @@ impl RestConn {
                 let p = reqwest::Proxy::all(prx).expect("proxy error!");
                 Self {
                     conn: builder.proxy(p).build().unwrap(),
-                    api_key: api_key.to_string(),
-                    sec_key: sec_key.to_string(),
+                    api_key,
+                    sec_key,
                     base_url: Url::parse(url).unwrap(),
                 }
             }
             None => Self {
                 conn: builder.build().unwrap(),
-                api_key: api_key.to_string(),
-                sec_key: sec_key.to_string(),
+                api_key,
+                sec_key,
                 base_url: Url::parse(url).unwrap(),
             },
         }
@@ -145,6 +155,36 @@ impl RestConn {
         }
     }
 
+    fn make_url<P>(&self, path: &str, params: P) -> Url
+    where
+        P: Serialize + Param + Debug,
+    {
+        let mut url = self.base_url.join(path).expect("invalid url");
+
+        match params.check_type() {
+            CheckType::None | CheckType::UserStream | CheckType::MarketData => {
+                let query = serde_urlencoded::to_string(params).unwrap();
+                if !query.is_empty() {
+                    url.set_query(Some(&query));
+                }
+            }
+            CheckType::Trade | CheckType::Margin | CheckType::UserData => {
+                let mut query = serde_urlencoded::to_string(params).unwrap();
+                let time_query = format!("recvWindow=5000&timestamp={}", helper::timestamp());
+                query = if query.is_empty() {
+                    time_query
+                } else {
+                    format!("{}&{}", query, time_query)
+                };
+
+                let signature = helper::signature(&self.sec_key, &query);
+                query = format!("{}&signature={}", query, signature);
+                url.set_query(Some(&query));
+            }
+        };
+        url
+    }
+
     /// REST请求，返回响应的Body字符串，否则报错
     ///```rust
     ///use ba_api::KLineInterval;
@@ -153,7 +193,7 @@ impl RestConn {
     ///
     ///let api_key = "TAfI8PqyqOYiegSoijSy";
     ///let sec_key = "MOIeI2mK13IEyrLHfCwh";
-    ///let rest_conn = RestConn::new(api_key, sec_key, Some("http://127.0.0.1:8118"));
+    ///let rest_conn = RestConn::new(api_key.to_string(), sec_key.to_string(), None);
     ///
     ///let pkline_path = "/api/v3/klines";
     ///let pkline = params::PKLine {
@@ -171,39 +211,52 @@ impl RestConn {
     where
         P: Serialize + Param + Debug,
     {
-        let mut url = self.base_url.join(path).expect("invalid url");
+        let url = self.make_url(path, params);
 
-        match params.check_type() {
-            CheckType::None | CheckType::UserStream | CheckType::MarketData => {
-                let query = serde_urlencoded::to_string(params).unwrap();
-                url.set_query(Some(&query));
+        // 不重连的方案
+        // let mut resp = match RestMethod::from_str(method)? {
+        //     RestMethod::Get => self.conn.get(url),
+        //     RestMethod::Post => self.conn.post(url),
+        //     RestMethod::Put => self.conn.put(url),
+        //     RestMethod::Delete => self.conn.delete(url),
+        // }
+        // .send()
+        // .await?;
+        // resp = Self::check_rest_resp(resp).await?;
+        // Ok(resp.text().await.unwrap())
+
+        // 尝试重连3次的方案
+        let mut retry = 4;
+        let mut resp = loop {
+            retry -= 1;
+            if retry != 3 {
+                warn!("Connect retry, remain retry times: {}", retry);
             }
-            CheckType::Trade | CheckType::Margin | CheckType::UserData => {
-                let mut query = serde_urlencoded::to_string(params).unwrap();
-                let time_query = format!("recvWindow=5000&timestamp={}", helper::timestamp());
-                query = if query.is_empty() {
-                    time_query
-                } else {
-                    format!("{}&{}", query, time_query)
-                };
 
-                let signature = helper::signature(&self.sec_key, &query);
-                query = format!("{}&signature={}", query, signature);
-                url.set_query(Some(&query));
-            }
-        };
+            let url = url.clone();
+            let req = match RestMethod::from_str(method)? {
+                RestMethod::Get => self.conn.get(url),
+                RestMethod::Post => self.conn.post(url),
+                RestMethod::Put => self.conn.put(url),
+                RestMethod::Delete => self.conn.delete(url),
+            };
 
-        let mut resp = match RestMethod::from_str(method)? {
-            RestMethod::Get => self.conn.get(url),
-            RestMethod::Post => self.conn.post(url),
-            RestMethod::Put => self.conn.put(url),
-            RestMethod::Delete => self.conn.delete(url),
-        }
-        .send()
-        .await?;
+            match req.send().await {
+                Ok(r) => break Ok(r),
+                Err(e) => {
+                    if e.is_connect() || e.is_timeout() {
+                        error!("connect failed {}", e.url().unwrap().to_string());
+                        if retry == 0 {
+                            break Err(RestApiError::ConnectError(e.to_string()));
+                        }
+                        continue;
+                    }
+                    break Err(RestApiError::RequestError(e));
+                }
+            };
+        }?;
 
         resp = Self::check_rest_resp(resp).await?;
-
         Ok(resp.text().await.unwrap())
     }
 }

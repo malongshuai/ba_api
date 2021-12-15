@@ -23,6 +23,9 @@ pub enum RestApiError {
     #[error("418 waf blocked")]
     Blocked,
 
+    #[error("connect err to {0}")]
+    ConnectError(String),
+
     #[error(transparent)]
     RequestError(#[from] reqwest::Error),
 
