@@ -1,5 +1,5 @@
 use crate::{
-    errors::{RestApiError, RestResult},
+    errors::{BiAnApiError, BiAnResult},
     types::order::{OrderRespType, OrderSide, OrderType, TimeInForce},
     KLineInterval,
 };
@@ -126,12 +126,12 @@ pub struct PDepth<'a> {
     limit: Option<u16>,
 }
 impl PDepth<'_> {
-    pub fn new(symbol: &str, limit: Option<u16>) -> RestResult<PDepth> {
+    pub fn new(symbol: &str, limit: Option<u16>) -> BiAnResult<PDepth> {
         let x: [u16; 8] = [5, 10, 20, 50, 100, 500, 1000, 5000];
 
         if let Some(n) = limit {
             if !x.contains(&n) {
-                return Err(RestApiError::ArgumentError(format!(
+                return Err(BiAnApiError::ArgumentError(format!(
                     "invalid limit `{}', valid limit(5,10,20,50,100,500,1000,5000)",
                     n
                 )));
@@ -149,7 +149,7 @@ pub struct PTrades<'a> {
     limit: Option<u16>,
 }
 impl PTrades<'_> {
-    pub fn new(symbol: &str, limit: Option<u16>) -> RestResult<PTrades> {
+    pub fn new(symbol: &str, limit: Option<u16>) -> BiAnResult<PTrades> {
         // if let Some(n) = limit {
         //     if n >= 1000 {
         //         return Err(RestApiError::ArgumentError(format!(
@@ -175,7 +175,7 @@ impl PHistoricalTrades<'_> {
         symbol: &str,
         limit: Option<u16>,
         from_id: Option<u64>,
-    ) -> RestResult<PHistoricalTrades> {
+    ) -> BiAnResult<PHistoricalTrades> {
         // if let Some(n) = limit {
         //     if n >= 1000 {
         //         return Err(RestApiError::ArgumentError(format!(
@@ -214,7 +214,7 @@ impl PAggTrades<'_> {
         start_time: Option<u64>,
         end_time: Option<u64>,
         limit: Option<u16>,
-    ) -> RestResult<PAggTrades> {
+    ) -> BiAnResult<PAggTrades> {
         // if let Some(n) = limit {
         //     if n >= 1000 {
         //         return Err(RestApiError::ArgumentError(format!(
@@ -228,21 +228,21 @@ impl PAggTrades<'_> {
             (None, None) => (),
             (Some(s), Some(e)) => {
                 if s >= e {
-                    return Err(RestApiError::ArgumentError(format!(
+                    return Err(BiAnApiError::ArgumentError(format!(
                         "start_time({}) should small than end_time({})",
                         s, e
                     )));
                 }
 
                 if (e - s) > 3_600_000 {
-                    return Err(RestApiError::ArgumentError(format!(
+                    return Err(BiAnApiError::ArgumentError(format!(
                         "end_time({}) - start_time({}) should great than 1hour",
                         e, s
                     )));
                 }
             }
             _ => {
-                return Err(RestApiError::ArgumentError(
+                return Err(BiAnApiError::ArgumentError(
                     "invalid start_time or end_time".to_string(),
                 ))
             }
@@ -281,10 +281,10 @@ impl PKLine {
         start_time: Option<u64>,
         end_time: Option<u64>,
         limit: Option<u16>,
-    ) -> RestResult<Self> {
+    ) -> BiAnResult<Self> {
         if let (Some(s), Some(e)) = (start_time, end_time) {
             if s >= e {
-                return Err(RestApiError::ArgumentError(format!(
+                return Err(BiAnApiError::ArgumentError(format!(
                     "start_time({}) should small than end_time({})",
                     s, e
                 )));
@@ -395,35 +395,35 @@ impl POrder {
         stop_price: Option<f64>,
         iceberg_qty: Option<f64>,
         new_order_resp_type: Option<&str>,
-    ) -> RestResult<POrder> {
+    ) -> BiAnResult<POrder> {
         let side = OrderSide::from(side);
         let ot = OrderType::from(order_type);
         let tif = time_in_force.map(TimeInForce::from);
         match ot {
             OrderType::Limit => {
                 if !(tif.is_some() && qty.is_some() && price.is_some()) {
-                    return Err(RestApiError::ArgumentError(
+                    return Err(BiAnApiError::ArgumentError(
                       format!("time_in_force({:?}), qty({:?}) and price({:?}) can't be omitted when order type is LIMIT",
                       tif, qty, price)));
                 }
             }
             OrderType::Market => {
                 if qty.is_none() && quote_order_qty.is_none() {
-                    return Err(RestApiError::ArgumentError(
+                    return Err(BiAnApiError::ArgumentError(
                       format!("qty({:?}) and quote_order_qty({:?}) can't be omitted when order type is MARKET", 
                       qty, quote_order_qty)));
                 }
             }
             OrderType::StopLoss | OrderType::TakeProfit => {
                 if !(qty.is_some() && stop_price.is_some()) {
-                    return Err(RestApiError::ArgumentError(
+                    return Err(BiAnApiError::ArgumentError(
                       format!("qty({:?}) and stop_price({:?}) can't be omitted when order type is STOP_LOSS or TAKE_PROFIT",
                        qty, stop_price)));
                 }
             }
             OrderType::StopLossLimit | OrderType::TakeProfitLimit => {
                 if !(tif.is_some() && qty.is_some() && price.is_some() && stop_price.is_some()) {
-                    return Err(RestApiError::ArgumentError(
+                    return Err(BiAnApiError::ArgumentError(
                       format!("time_in_force({:?}), qty({:?}), price({:?}) and stop_price({:?}) can't be omitted when order type is STOP_LOSS_LIMIT or TAKE_PROFIT_LIMIT",
                        tif, qty, price, stop_price)
                     ));
@@ -431,7 +431,7 @@ impl POrder {
             }
             OrderType::LimitMaker => {
                 if !(qty.is_some() && price.is_some()) {
-                    return Err(RestApiError::ArgumentError(format!(
+                    return Err(BiAnApiError::ArgumentError(format!(
                         "qty({:?}) and price({:?}) can't be omitted when order type is LIMIT_MAKER",
                         qty, price
                     )));
@@ -477,9 +477,9 @@ impl PCancelOrder {
         order_id: Option<u64>,
         orig_client_order_id: Option<&str>,
         new_client_order_id: Option<&str>,
-    ) -> RestResult<PCancelOrder> {
+    ) -> BiAnResult<PCancelOrder> {
         if let (None, None) = (order_id, orig_client_order_id) {
-            return Err(RestApiError::ArgumentError(
+            return Err(BiAnApiError::ArgumentError(
                 "must provide one of `order_id` and `orig_client_order_id`".to_string(),
             ));
         }
@@ -505,7 +505,7 @@ pub struct PCancelOpenOrders {
     symbol: String,
 }
 impl PCancelOpenOrders {
-    pub fn new(symbol: &str) -> RestResult<PCancelOpenOrders> {
+    pub fn new(symbol: &str) -> BiAnResult<PCancelOpenOrders> {
         Ok(PCancelOpenOrders {
             symbol: symbol.to_uppercase(),
         })
@@ -530,9 +530,9 @@ impl PGetOrder {
         symbol: &str,
         order_id: Option<u64>,
         orig_client_order_id: Option<&str>,
-    ) -> RestResult<PGetOrder> {
+    ) -> BiAnResult<PGetOrder> {
         if let (None, None) = (order_id, orig_client_order_id) {
-            return Err(RestApiError::ArgumentError(
+            return Err(BiAnApiError::ArgumentError(
                 "must provide one of `order_id` and `orig_client_order_id`".to_string(),
             ));
         }
@@ -555,7 +555,7 @@ pub struct PGetOpenOrders {
     symbol: String,
 }
 impl PGetOpenOrders {
-    pub fn new(symbol: &str) -> RestResult<PGetOpenOrders> {
+    pub fn new(symbol: &str) -> BiAnResult<PGetOpenOrders> {
         Ok(PGetOpenOrders {
             symbol: symbol.to_uppercase(),
         })
@@ -583,7 +583,7 @@ impl PAllOrders {
         start_time: Option<u64>,
         end_time: Option<u64>,
         limit: Option<u16>,
-    ) -> RestResult<PAllOrders> {
+    ) -> BiAnResult<PAllOrders> {
         // if let Some(n) = limit {
         //     if n >= 1000 {
         //         return Err(RestApiError::ArgumentError(format!(
@@ -635,7 +635,7 @@ impl PMyTrades {
         end_time: Option<u64>,
         from_id: Option<u64>,
         limit: Option<u16>,
-    ) -> RestResult<PMyTrades> {
+    ) -> BiAnResult<PMyTrades> {
         // if let Some(n) = limit {
         //     if n >= 1000 {
         //         return Err(RestApiError::ArgumentError(format!(

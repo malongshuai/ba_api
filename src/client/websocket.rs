@@ -13,7 +13,7 @@ use tokio_tungstenite::{
 use tracing::{debug, error};
 
 use crate::{
-    errors::{WsApiError, WsResult},
+    errors::{BiAnApiError, BiAnResult},
     KLineInterval, WS_BASE_URL,
 };
 
@@ -46,9 +46,9 @@ impl WS {
 
     /// 建立ws连接，并处理返回数据  
     /// 每次调用都只能订阅单个频道(channel参数)  
-    pub async fn new(channel: &str, names: Vec<String>) -> WsResult<WS> {
+    pub async fn new(channel: &str, names: Vec<String>) -> BiAnResult<WS> {
         if names.len() > 1024 {
-            return Err(WsApiError::TooManySubscribes(names.len()));
+            return Err(BiAnApiError::TooManySubscribes(names.len()));
         }
 
         let base_url = *WS_BASE_URL;
@@ -66,14 +66,14 @@ impl WS {
     }
 
     /// 创建一个新的WebSocketStream，并将其替换该ws连接内部已有的WebSocketStream  
-    pub async fn replace_inner_stream(&mut self) -> WsResult<()> {
+    pub async fn replace_inner_stream(&mut self) -> BiAnResult<()> {
         let (ws_stream, _response) = connect_async(&self.url).await?;
         self.conn_stream = ws_stream;
         Ok(())
     }
 
     /// 关闭ws conn_stream
-    async fn close_stream(&mut self) -> WsResult<()> {
+    async fn close_stream(&mut self) -> BiAnResult<()> {
         let close_frame = CloseFrame {
             code: CloseCode::Normal,
             reason: std::borrow::Cow::Borrowed("force close"),
@@ -123,7 +123,7 @@ impl WsClient {
         channel: &str,
         names: Vec<String>,
         close_receiver: mpsc::Receiver<bool>,
-    ) -> WsResult<Self> {
+    ) -> BiAnResult<Self> {
         let ws = WS::new(channel, names).await?;
         let names = ws.names.clone();
         let url = ws.url.clone();
@@ -157,7 +157,7 @@ impl WsClient {
         &mut self,
         msg: Message,
         data_sender: mpsc::Sender<String>,
-    ) -> WsResult<()> {
+    ) -> BiAnResult<()> {
         match msg {
             Message::Text(data) => {
                 // debug!("received Text Frame: {}", data);
@@ -208,7 +208,7 @@ impl WsClient {
     ///
     /// wsc.ws_client(data_tx).await.unwrap();
     /// ```
-    pub async fn ws_client(&mut self, data_sender: mpsc::Sender<String>) -> WsResult<()> {
+    pub async fn ws_client(&mut self, data_sender: mpsc::Sender<String>) -> BiAnResult<()> {
         loop {
             tokio::select! {
                 Some(msg) = self.ws.conn_stream.next() => {
@@ -241,7 +241,7 @@ impl WsClient {
         names: Vec<String>,
         data_sender: mpsc::Sender<String>,
         close_receiver: mpsc::Receiver<bool>,
-    ) -> WsResult<()> {
+    ) -> BiAnResult<()> {
         let mut wsc = Self::new(channel, names, close_receiver).await?;
         wsc.ws_client(data_sender).await?;
         Ok(())
@@ -262,7 +262,7 @@ impl WsClient {
         symbols: Vec<String>,
         data_sender: mpsc::Sender<String>,
         close_receiver: mpsc::Receiver<bool>,
-    ) -> WsResult<()> {
+    ) -> BiAnResult<()> {
         let symbols: Vec<String> = symbols.iter().map(|x| x.to_lowercase()).collect();
         Ok(Self::sub_channel("aggTrade", symbols, data_sender, close_receiver).await?)
     }
@@ -274,7 +274,7 @@ impl WsClient {
         symbols: Vec<String>,
         data_sender: mpsc::Sender<String>,
         close_receiver: mpsc::Receiver<bool>,
-    ) -> WsResult<()> {
+    ) -> BiAnResult<()> {
         let symbols: Vec<String> = symbols.iter().map(|x| x.to_lowercase()).collect();
         Ok(Self::sub_channel("trade", symbols, data_sender, close_receiver).await?)
     }
@@ -313,7 +313,7 @@ impl WsClient {
         symbols: Vec<String>,
         data_sender: mpsc::Sender<String>,
         close_receiver: mpsc::Receiver<bool>,
-    ) -> WsResult<()> {
+    ) -> BiAnResult<()> {
         if !KLineInterval::is_intv(interval) {
             panic!(
                 "argument error: <{}> is not the valid kline interval",
@@ -332,7 +332,7 @@ impl WsClient {
         symbols: Vec<String>,
         data_sender: mpsc::Sender<String>,
         close_receiver: mpsc::Receiver<bool>,
-    ) -> WsResult<()> {
+    ) -> BiAnResult<()> {
         let symbols: Vec<String> = symbols.iter().map(|x| x.to_lowercase()).collect();
         Ok(Self::sub_channel("miniTicker", symbols, data_sender, close_receiver).await?)
     }
@@ -342,7 +342,7 @@ impl WsClient {
     pub async fn all_mini_ticker(
         data_sender: mpsc::Sender<String>,
         close_receiver: mpsc::Receiver<bool>,
-    ) -> WsResult<()> {
+    ) -> BiAnResult<()> {
         Ok(Self::sub_channel(
             "arr",
             vec!["!miniTicker".to_string()],
@@ -359,7 +359,7 @@ impl WsClient {
         symbols: Vec<String>,
         data_sender: mpsc::Sender<String>,
         close_receiver: mpsc::Receiver<bool>,
-    ) -> WsResult<()> {
+    ) -> BiAnResult<()> {
         let symbols: Vec<String> = symbols.iter().map(|x| x.to_lowercase()).collect();
         Ok(Self::sub_channel("miniTicker", symbols, data_sender, close_receiver).await?)
     }
@@ -369,7 +369,7 @@ impl WsClient {
     pub async fn all_ticker(
         data_sender: mpsc::Sender<String>,
         close_receiver: mpsc::Receiver<bool>,
-    ) -> WsResult<()> {
+    ) -> BiAnResult<()> {
         Ok(Self::sub_channel(
             "arr",
             vec!["!ticker".to_string()],
@@ -386,7 +386,7 @@ impl WsClient {
         symbols: Vec<String>,
         data_sender: mpsc::Sender<String>,
         close_receiver: mpsc::Receiver<bool>,
-    ) -> WsResult<()> {
+    ) -> BiAnResult<()> {
         let symbols: Vec<String> = symbols.iter().map(|x| x.to_lowercase()).collect();
         Ok(Self::sub_channel("bookTicker", symbols, data_sender, close_receiver).await?)
     }
@@ -396,7 +396,7 @@ impl WsClient {
     pub async fn all_bookticker(
         data_sender: mpsc::Sender<String>,
         close_receiver: mpsc::Receiver<bool>,
-    ) -> WsResult<()> {
+    ) -> BiAnResult<()> {
         let names: Vec<String> = vec![];
         Ok(Self::sub_channel("!bookTicker", names, data_sender, close_receiver).await?)
     }
@@ -409,7 +409,7 @@ impl WsClient {
         level: u8,
         data_sender: mpsc::Sender<String>,
         close_receiver: mpsc::Receiver<bool>,
-    ) -> WsResult<()> {
+    ) -> BiAnResult<()> {
         if ![5u8, 10u8, 20u8].contains(&level) {
             panic!("argument error: <{}> is not the valid depth level", level)
         }
@@ -425,7 +425,7 @@ impl WsClient {
         symbols: Vec<String>,
         data_sender: mpsc::Sender<String>,
         close_receiver: mpsc::Receiver<bool>,
-    ) -> WsResult<()> {
+    ) -> BiAnResult<()> {
         let symbols: Vec<String> = symbols.iter().map(|x| x.to_lowercase()).collect();
         Ok(Self::sub_channel("depth@100ms", symbols, data_sender, close_receiver).await?)
     }
@@ -437,7 +437,7 @@ impl WsClient {
         listen_key: String,
         data_sender: mpsc::Sender<String>,
         close_receiver: mpsc::Receiver<bool>,
-    ) -> WsResult<()> {
+    ) -> BiAnResult<()> {
         Ok(Self::sub_channel(&listen_key, vec![], data_sender, close_receiver).await?)
     }
 }

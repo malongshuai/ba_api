@@ -1,5 +1,5 @@
 use crate::{
-    errors::{BadRequest, MethodError, RestApiError, RestResult},
+    errors::{BadRequest, MethodError, BiAnApiError, BiAnResult},
     REST_BASE_URL,
 };
 use reqwest::{header, Url};
@@ -127,27 +127,27 @@ impl RestConn {
         }
     }
 
-    async fn check_rest_resp(resp: reqwest::Response) -> RestResult<reqwest::Response> {
+    async fn check_rest_resp(resp: reqwest::Response) -> BiAnResult<reqwest::Response> {
         let status_code = u16::from(resp.status());
         if status_code >= 300 {
             let e = if status_code >= 500 {
-                RestApiError::ServerError(resp.text().await.unwrap_or_default())
+                BiAnApiError::ServerError(resp.text().await.unwrap_or_default())
             } else if status_code == 400 {
                 let resp_test = resp.text().await.unwrap_or_default();
                 match serde_json::from_str::<BadRequest>(resp_test.as_str()) {
-                    Ok(error) => RestApiError::BadRequest(error.code, error.msg),
-                    Err(_) => RestApiError::ClientError(resp_test),
+                    Ok(error) => BiAnApiError::BadRequest(error.code, error.msg),
+                    Err(_) => BiAnApiError::ClientError(resp_test),
                 }
             } else if status_code == 403 {
-                RestApiError::Waf
+                BiAnApiError::Waf
             } else if status_code == 418 {
-                RestApiError::Blocked
+                BiAnApiError::Blocked
             } else if status_code == 429 {
-                RestApiError::WafWarning
+                BiAnApiError::WafWarning
             } else if status_code > 400 {
-                RestApiError::ClientError(resp.text().await.unwrap_or_default())
+                BiAnApiError::ClientError(resp.text().await.unwrap_or_default())
             } else {
-                RestApiError::Unknown(resp.text().await.unwrap_or_default())
+                BiAnApiError::Unknown(resp.text().await.unwrap_or_default())
             };
             Err(e)
         } else {
@@ -207,7 +207,7 @@ impl RestConn {
     ///let body = rest_conn.rest_req("get", pkline_path, pkline).await.unwrap();
     ///```
     #[tracing::instrument(skip(self))]
-    pub async fn rest_req<P>(&self, method: &str, path: &str, params: P) -> RestResult<RespBody>
+    pub async fn rest_req<P>(&self, method: &str, path: &str, params: P) -> BiAnResult<RespBody>
     where
         P: Serialize + Param + Debug,
     {
@@ -247,11 +247,11 @@ impl RestConn {
                     if e.is_connect() || e.is_timeout() {
                         error!("connect failed {}", e.url().unwrap().to_string());
                         if retry == 0 {
-                            break Err(RestApiError::ConnectError(e.to_string()));
+                            break Err(BiAnApiError::ConnectError(e.to_string()));
                         }
                         continue;
                     }
-                    break Err(RestApiError::RequestError(e));
+                    break Err(BiAnApiError::RequestError(e));
                 }
             };
         }?;

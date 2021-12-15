@@ -6,7 +6,7 @@ use super::{
     RestConn,
 };
 use crate::{
-    errors::RestResult,
+    errors::BiAnResult,
     types::{
         account::{Account, ListenKey},
         order::{CancelOpenOrdersInfo, CancelOrderInfo, MyTrades, Order, OrderInfo},
@@ -21,7 +21,7 @@ use tracing::instrument;
 impl RestConn {
     /// 获取现货账户信息
     #[instrument(skip(self))]
-    pub async fn account(&self) -> RestResult<Account> {
+    pub async fn account(&self) -> BiAnResult<Account> {
         let path = "/api/v3/account";
         let params = PAccount;
         let res = self.rest_req("get", path, params).await?;
@@ -61,7 +61,7 @@ impl RestConn {
         stop_price: Option<f64>,
         iceberg_qty: Option<f64>,
         new_order_resp_type: Option<&str>,
-    ) -> RestResult<Order> {
+    ) -> BiAnResult<Order> {
         let path = "/api/v3/order";
         let params = POrder::new(
             symbol,
@@ -94,7 +94,7 @@ impl RestConn {
         side: &str,
         qty: f64,
         price: f64,
-    ) -> RestResult<Order> {
+    ) -> BiAnResult<Order> {
         let amount = if side.to_lowercase() == "sell" {
             qty
         } else {
@@ -128,7 +128,7 @@ impl RestConn {
         order_id: Option<u64>,
         orig_client_order_id: Option<&str>,
         new_client_order_id: Option<&str>,
-    ) -> RestResult<CancelOrderInfo> {
+    ) -> BiAnResult<CancelOrderInfo> {
         let path = "/api/v3/order";
         let params =
             PCancelOrder::new(symbol, order_id, orig_client_order_id, new_client_order_id)?;
@@ -139,7 +139,7 @@ impl RestConn {
 
     /// 撤单(撤销某个交易对下的所有挂单，包括OCO挂单)
     #[instrument(skip(self))]
-    pub async fn cancel_open_orders(&self, symbol: &str) -> RestResult<Vec<CancelOpenOrdersInfo>> {
+    pub async fn cancel_open_orders(&self, symbol: &str) -> BiAnResult<Vec<CancelOpenOrdersInfo>> {
         let path = "/api/v3/openOrders";
         let params = PCancelOpenOrders::new(symbol)?;
         let res = self.rest_req("delete", path, params).await?;
@@ -154,7 +154,7 @@ impl RestConn {
         symbol: &str,
         order_id: Option<u64>,
         orig_client_order_id: Option<&str>,
-    ) -> RestResult<OrderInfo> {
+    ) -> BiAnResult<OrderInfo> {
         let path = "/api/v3/order";
         let params = PGetOrder::new(symbol, order_id, orig_client_order_id)?;
         let res = self.rest_req("get", path, params).await?;
@@ -164,7 +164,7 @@ impl RestConn {
 
     /// 查询某交易对或所有交易对下的所有当前挂单信息
     #[instrument(skip(self))]
-    pub async fn get_open_orders(&self, symbol: &str) -> RestResult<Vec<OrderInfo>> {
+    pub async fn get_open_orders(&self, symbol: &str) -> BiAnResult<Vec<OrderInfo>> {
         let path = "/api/v3/openOrders";
         let params = PGetOpenOrders::new(symbol)?;
         let res = self.rest_req("get", path, params).await?;
@@ -181,7 +181,7 @@ impl RestConn {
         start_time: Option<u64>,
         end_time: Option<u64>,
         limit: Option<u16>,
-    ) -> RestResult<Vec<OrderInfo>> {
+    ) -> BiAnResult<Vec<OrderInfo>> {
         let path = "/api/v3/allOrders";
         let params = PAllOrders::new(symbol, order_id, start_time, end_time, limit)?;
         let res = self.rest_req("get", path, params).await?;
@@ -199,7 +199,7 @@ impl RestConn {
         end_time: Option<u64>,
         from_id: Option<u64>,
         limit: Option<u16>,
-    ) -> RestResult<Vec<MyTrades>> {
+    ) -> BiAnResult<Vec<MyTrades>> {
         let path = "/api/v3/myTrades";
         let params = PMyTrades::new(symbol, order_id, start_time, end_time, from_id, limit)?;
         let res = self.rest_req("get", path, params).await?;
@@ -209,7 +209,7 @@ impl RestConn {
 
     /// 查询目前下单数
     #[instrument(skip(self))]
-    pub async fn rate_limit_info(&self) -> RestResult<Vec<RateLimitInfo>> {
+    pub async fn rate_limit_info(&self) -> BiAnResult<Vec<RateLimitInfo>> {
         let path = "/api/v3/rateLimit/order";
         let params = PRateLimitInfo;
         let res = self.rest_req("get", path, params).await?;
@@ -226,7 +226,7 @@ impl RestConn {
         account_type: &str,
         action: &str,
         params: P,
-    ) -> RestResult<String> {
+    ) -> BiAnResult<String> {
         let path = match account_type {
             "spot" => "/api/v3/userDataStream",
             "margin" => "/sapi/v1/userDataStream",
@@ -248,7 +248,7 @@ impl RestConn {
 
     /// 生成或延迟现货账户的ListenKey，如果当前现货账户没有ListenKey，则生成一个新的ListenKey，有效期60分钟，如果已有，则延长该ListenKey有效期60分钟
     #[instrument(skip(self))]
-    pub async fn new_spot_listen_key(&self) -> RestResult<String> {
+    pub async fn new_spot_listen_key(&self) -> BiAnResult<String> {
         let params = PListenKey::new(None, None);
         let listen_key = self.listen_key("spot", "create", params).await?;
         Ok(listen_key)
@@ -256,7 +256,7 @@ impl RestConn {
 
     /// 延迟现货账户的ListenKey，有效期延长至本次调用后60分钟
     #[instrument(skip(self))]
-    pub async fn delay_spot_listen_key(&self, listen_key: &str) -> RestResult<()> {
+    pub async fn delay_spot_listen_key(&self, listen_key: &str) -> BiAnResult<()> {
         let params = PListenKey::new(Some(listen_key), None);
         self.listen_key("spot", "delay", params).await?;
         Ok(())
@@ -264,7 +264,7 @@ impl RestConn {
 
     /// 删除现货账户的ListenKey，将关闭用户数据流
     #[instrument(skip(self))]
-    pub async fn delete_spot_listen_key(&self, listen_key: &str) -> RestResult<()> {
+    pub async fn delete_spot_listen_key(&self, listen_key: &str) -> BiAnResult<()> {
         let params = PListenKey::new(Some(listen_key), None);
         self.listen_key("spot", "delete", params).await?;
 
@@ -273,7 +273,7 @@ impl RestConn {
 
     /// 生成或延迟杠杆账户的ListenKey，如果当前账户没有ListenKey，则生成一个新的ListenKey，有效期60分钟，如果已有，则延长该ListenKey有效期60分钟
     #[instrument(skip(self))]
-    pub async fn new_margin_listen_key(&self) -> RestResult<String> {
+    pub async fn new_margin_listen_key(&self) -> BiAnResult<String> {
         let params = PListenKey::new(None, None);
         let listen_key = self.listen_key("margin", "create", params).await?;
         Ok(listen_key)
@@ -281,7 +281,7 @@ impl RestConn {
 
     /// 延迟杠杆账户的ListenKey，有效期延长至本次调用后60分钟
     #[instrument(skip(self))]
-    pub async fn delay_margin_listen_key(&self, listen_key: &str) -> RestResult<()> {
+    pub async fn delay_margin_listen_key(&self, listen_key: &str) -> BiAnResult<()> {
         let params = PListenKey::new(Some(listen_key), None);
         self.listen_key("margin", "delay", params).await?;
         Ok(())
@@ -289,7 +289,7 @@ impl RestConn {
 
     /// 删除杠杆账户的ListenKey，将关闭用户数据流
     #[instrument(skip(self))]
-    pub async fn delete_margin_listen_key(&self, listen_key: &str) -> RestResult<()> {
+    pub async fn delete_margin_listen_key(&self, listen_key: &str) -> BiAnResult<()> {
         let params = PListenKey::new(Some(listen_key), None);
         self.listen_key("margin", "delete", params).await?;
 
@@ -298,7 +298,7 @@ impl RestConn {
 
     /// 生成或延迟逐仓杠杆账户的ListenKey，如果当前账户没有ListenKey，则生成一个新的ListenKey，有效期60分钟，如果已有，则延长该ListenKey有效期60分钟
     #[instrument(skip(self))]
-    pub async fn new_isolated_margin_listen_key(&self, symbol: &str) -> RestResult<String> {
+    pub async fn new_isolated_margin_listen_key(&self, symbol: &str) -> BiAnResult<String> {
         let params = PListenKey::new(None, Some(symbol));
         let listen_key = self.listen_key("margin_isolated", "create", params).await?;
         Ok(listen_key)
@@ -310,7 +310,7 @@ impl RestConn {
         &self,
         listen_key: &str,
         symbol: &str,
-    ) -> RestResult<()> {
+    ) -> BiAnResult<()> {
         let params = PListenKey::new(Some(listen_key), Some(symbol));
         self.listen_key("margin_isolated", "delay", params).await?;
         Ok(())
@@ -322,7 +322,7 @@ impl RestConn {
         &self,
         listen_key: &str,
         symbol: &str,
-    ) -> RestResult<()> {
+    ) -> BiAnResult<()> {
         let params = PListenKey::new(Some(listen_key), Some(symbol));
         self.listen_key("margin_isolated", "delete", params).await?;
 

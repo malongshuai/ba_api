@@ -1,10 +1,10 @@
-use std::fmt::Display;
 use serde::{Deserialize, Serialize};
+use std::fmt::Display;
 use thiserror::Error;
 use tokio_tungstenite::tungstenite;
 
 #[derive(Debug, Error)]
-pub enum RestApiError {
+pub enum BiAnApiError {
     #[error("4xx client error: {0}")]
     ClientError(String),
 
@@ -38,11 +38,19 @@ pub enum RestApiError {
     #[error("argument error: {0}")]
     ArgumentError(String),
 
+    /// ws错误
+    #[error(transparent)]
+    WsError(#[from] tungstenite::error::Error),
+
+    /// ws错误，将要订阅的数量超出了限制(币安每个ws连接最多只允许定于1024个Stream)
+    #[error("too many subscribes {0}")]
+    TooManySubscribes(usize),
+
     #[error("unknown error: {0}")]
     Unknown(String),
 }
 
-pub type RestResult<T> = Result<T, RestApiError>;
+pub type BiAnResult<T> = Result<T, BiAnApiError>;
 
 #[derive(Debug, Error)]
 pub struct MethodError {
@@ -65,13 +73,3 @@ impl Display for MethodError {
     }
 }
 
-#[derive(Debug, Error)]
-pub enum WsApiError {
-    #[error(transparent)]
-    WsError(#[from] tungstenite::error::Error),
-
-    /// 将要订阅的数量超出了限制(币安每个ws连接最多只允许定于1024个Stream)
-    #[error("too many subscribes {0}")]
-    TooManySubscribes(usize),
-}
-pub type WsResult<T> = Result<T, WsApiError>;

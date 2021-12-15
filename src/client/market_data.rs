@@ -2,7 +2,7 @@ use std::time::SystemTime;
 
 use tracing::instrument;
 
-use crate::errors::RestResult;
+use crate::errors::BiAnResult;
 use crate::types::depth::Depth;
 use crate::types::order::{AggTrade, HistoricalTrade, Trade};
 use crate::types::other_types::{AvgPrice, Prices, ServerTime};
@@ -20,7 +20,7 @@ use super::RestConn;
 impl RestConn {
     /// 测试连通性，连通时返回true
     #[instrument(skip(self))]
-    pub async fn ping(&self) -> RestResult<bool> {
+    pub async fn ping(&self) -> BiAnResult<bool> {
         let path = "/api/v3/ping";
         let res = self.rest_req("get", path, PPing).await?;
         Ok(res == "{}")
@@ -28,7 +28,7 @@ impl RestConn {
 
     /// 获取服务器时间，获取成功时返回u64
     #[instrument(skip(self))]
-    pub async fn server_time(&self) -> RestResult<u64> {
+    pub async fn server_time(&self) -> BiAnResult<u64> {
         let path = "/api/v3/time";
         let res = self.rest_req("get", path, PServerTime).await?;
         let time_res = serde_json::from_str::<ServerTime>(&res)?;
@@ -45,7 +45,7 @@ impl RestConn {
     /// rest_conn.exchange_info(Some(vec!["BTCUSDT"]));
     /// ```
     #[instrument(skip(self))]
-    pub async fn exchange_info(&self, symbols: Option<Vec<&str>>) -> RestResult<ExchangeInfo> {
+    pub async fn exchange_info(&self, symbols: Option<Vec<&str>>) -> BiAnResult<ExchangeInfo> {
         let path = "/api/v3/exchangeInfo";
         let params = PExchangeInfo::new(symbols);
         let res = self.rest_req("get", path, params).await?;
@@ -55,7 +55,7 @@ impl RestConn {
 
     /// 获取指定币的深度信息(limit为None时默认返回买盘和卖盘各100条信息)
     #[instrument(skip(self))]
-    pub async fn depth(&self, symbol: &str, limit: Option<u16>) -> RestResult<Depth> {
+    pub async fn depth(&self, symbol: &str, limit: Option<u16>) -> BiAnResult<Depth> {
         let path = "/api/v3/depth";
         let params = PDepth::new(symbol, limit)?;
         let res = self.rest_req("get", path, params).await?;
@@ -65,7 +65,7 @@ impl RestConn {
 
     /// 近期成交列表(limit为None时默认返回最近500条信息)
     #[instrument(skip(self))]
-    pub async fn trades(&self, symbol: &str, limit: Option<u16>) -> RestResult<Vec<Trade>> {
+    pub async fn trades(&self, symbol: &str, limit: Option<u16>) -> BiAnResult<Vec<Trade>> {
         let path = "/api/v3/trades";
         let params = PTrades::new(symbol, limit)?;
         let res = self.rest_req("get", path, params).await?;
@@ -80,7 +80,7 @@ impl RestConn {
         symbol: &str,
         limit: Option<u16>,
         from_id: Option<u64>,
-    ) -> RestResult<Vec<HistoricalTrade>> {
+    ) -> BiAnResult<Vec<HistoricalTrade>> {
         let path = "/api/v3/historicalTrades";
         let params = PHistoricalTrades::new(symbol, limit, from_id)?;
         let res = self.rest_req("get", path, params).await?;
@@ -99,7 +99,7 @@ impl RestConn {
         start_time: Option<u64>,
         end_time: Option<u64>,
         limit: Option<u16>,
-    ) -> RestResult<Vec<AggTrade>> {
+    ) -> BiAnResult<Vec<AggTrade>> {
         let path = "/api/v3/aggTrades";
         let params = PAggTrades::new(symbol, from_id, start_time, end_time, limit)?;
         let res = self.rest_req("get", path, params).await?;
@@ -123,7 +123,7 @@ impl RestConn {
         start_time: Option<u64>,
         end_time: Option<u64>,
         limit: Option<u16>,
-    ) -> RestResult<KLines> {
+    ) -> BiAnResult<KLines> {
         let path = "/api/v3/klines";
         let params = PKLine::new(symbol, interval, start_time, end_time, limit)?;
         let res = self.rest_req("get", path, params).await?;
@@ -151,7 +151,7 @@ impl RestConn {
 
     /// 获取当前均价(币安提供当前5分钟的均价，5分钟内的总成交额除以总成交量)  
     #[instrument(skip(self))]
-    pub async fn avg_price(&self, symbol: &str) -> RestResult<AvgPrice> {
+    pub async fn avg_price(&self, symbol: &str) -> BiAnResult<AvgPrice> {
         let path = "/api/v3/avgPrice";
         let params = PAvgPrice::new(symbol);
         let res = self.rest_req("get", path, params).await?;
@@ -162,7 +162,7 @@ impl RestConn {
     /// 获取某交易对或所有交易对的最新价格(实时价)  
     /// symbol为None时返回所有交易对的实时价格
     #[instrument(skip(self))]
-    pub async fn price(&self, symbol: Option<&str>) -> RestResult<Prices> {
+    pub async fn price(&self, symbol: Option<&str>) -> BiAnResult<Prices> {
         let path = "/api/v3/ticker/price";
         let params = PPrice::new(symbol);
         let res = self.rest_req("get", path, params).await?;
@@ -173,7 +173,7 @@ impl RestConn {
     /// 获取某交易对或所有交易对的最优挂单价  
     /// symbol为None时返回所有交易对的信息
     #[instrument(skip(self))]
-    pub async fn book_ticker(&self, symbol: Option<&str>) -> RestResult<BookTickers> {
+    pub async fn book_ticker(&self, symbol: Option<&str>) -> BiAnResult<BookTickers> {
         let path = "/api/v3/ticker/bookTicker";
         let params = PBookTicker::new(symbol);
         let res = self.rest_req("get", path, params).await?;
@@ -184,7 +184,7 @@ impl RestConn {
     /// 获取某交易对或所有交易对的24小时价格变动信息  
     /// symbol为None时返回所有交易对的24时价格变动信息(返回数据量巨大，且请求的权重极大)
     #[instrument(skip(self))]
-    pub async fn hr24(&self, symbol: Option<&str>) -> RestResult<FullTickers> {
+    pub async fn hr24(&self, symbol: Option<&str>) -> BiAnResult<FullTickers> {
         let path = "/api/v3/ticker/24hr";
         let params = PHr24::new(symbol);
         let res = self.rest_req("get", path, params).await?;
