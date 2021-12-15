@@ -1,5 +1,5 @@
 use crate::{
-    errors::{BadRequest, MethodError, BiAnApiError, BiAnResult},
+    errors::{BadRequest, BiAnApiError, BiAnResult, MethodError},
     REST_BASE_URL,
 };
 use reqwest::{header, Url};
@@ -255,6 +255,9 @@ impl RestConn {
                 }
             };
         }?;
+
+        // let head = resp.headers();
+        // println!( "+ weight +{:?} {:?}", head.get("x-mbx-used-weight"), head.get("x-mbx-used-weight-1m") );
 
         resp = Self::check_rest_resp(resp).await?;
         Ok(resp.text().await.unwrap())

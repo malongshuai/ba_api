@@ -51,20 +51,23 @@ pub enum WebSocketAccount {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum Response {
+    /// 和账户有关的推送数据，包括余额更新、订单更新、资产更新，必须放在Trade字段的的前面
+    Account(WebSocketAccount),
+
+    /// 逐笔交易，必须放在Account字段的的后面
+    Trade(Trade),
+
     /// 归集交易的推送数据
     AggTrade(AggTrade),
-
-    /// 逐笔交易
-    Trade(Trade),
 
     /// K线数据
     KLine(KLine),
 
-    /// 按Symbol的或全市场的精简的Ticker
-    MiniTickers(MiniTickers),
-
-    /// 按Symbol的或全市场的完整的Ticker
+    /// 按Symbol的或全市场的完整的Ticker，必须放在MiniTickers字段的的前面
     FullTickers(FullTickers),
+
+    /// 按Symbol的或全市场的精简的Ticker，必须放在FullTickers字段的的后面
+    MiniTickers(MiniTickers),
 
     /// 按Symbol的或全市场的完整的最优挂单信息(BookTicker)
     BookTickers(BookTickers),
@@ -73,9 +76,6 @@ pub enum Response {
     /// 有限档深度信息中的symbol字段为空，且first_update_id字段为0  
     /// 增量深度信息中，这两个字段均有有效值  
     Depth(Depth),
-
-    /// 和账户有关的推送数据，包括余额更新、订单更新、资产更新
-    Account(WebSocketAccount),
 }
 
 /// 订阅WebSocket组合流时响应的数据类型

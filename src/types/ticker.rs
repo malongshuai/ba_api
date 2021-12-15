@@ -408,7 +408,7 @@ pub struct MiniTicker {
     #[serde(rename = "s")]
     pub symbol: String,
     /// 最新成交价格
-    #[serde(rename = "t", deserialize_with = "string_to_f64")]
+    #[serde(rename = "c", deserialize_with = "string_to_f64")]
     pub close: f64,
     /// 24小时前开始第一笔成交价格
     #[serde(rename = "o", deserialize_with = "string_to_f64")]
