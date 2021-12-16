@@ -1,10 +1,10 @@
 use crate::{
     errors::{BadRequest, BiAnApiError, BiAnResult, MethodError},
-    REST_BASE_URL,
+    ExchangeInfo, REST_BASE_URL,
 };
 use reqwest::{header, Url};
 use serde::Serialize;
-use std::{fmt::Debug, str::FromStr};
+use std::{fmt::Debug, str::FromStr, sync::Arc};
 use tokio::time;
 use tracing::{error, warn};
 
@@ -84,6 +84,7 @@ pub struct RestConn {
     api_key: String,
     sec_key: String,
     base_url: Url,
+    pub exchange_info: Arc<Option<ExchangeInfo>>,
 }
 
 #[allow(dead_code)]
@@ -93,7 +94,7 @@ impl RestConn {
     ///let sec_key = "abcdefhijklmnopqrstuvwxyz".to_string();
     ///let rest_conn = RestConn::new(api_key, sec_key, Some("http://127.0.0.1:8118".to_string()));
     ///```
-    pub fn new(api_key: String, sec_key: String, proxy: Option<String>) -> RestConn {
+    pub async fn new(api_key: String, sec_key: String, proxy: Option<String>) -> RestConn {
         let mut header = header::HeaderMap::new();
         header.insert(
             "X-MBX-APIKEY",
@@ -106,24 +107,39 @@ impl RestConn {
             .default_headers(header)
             .connect_timeout(time::Duration::from_secs(5))
             .pool_idle_timeout(None);
-        let url = *REST_BASE_URL;
+        // let url = *REST_BASE_URL;
 
-        match proxy {
+        let conn = match proxy {
             Some(prx) => {
                 let p = reqwest::Proxy::all(prx).expect("proxy error!");
-                Self {
-                    conn: builder.proxy(p).build().unwrap(),
-                    api_key,
-                    sec_key,
-                    base_url: Url::parse(url).unwrap(),
-                }
+                builder.proxy(p).build().unwrap()
             }
-            None => Self {
-                conn: builder.build().unwrap(),
-                api_key,
-                sec_key,
-                base_url: Url::parse(url).unwrap(),
-            },
+            None => builder.build().unwrap(),
+        };
+
+        let mut rest_conn = RestConn {
+            conn,
+            api_key,
+            sec_key,
+            base_url: Url::parse(*REST_BASE_URL).unwrap(),
+            exchange_info: Arc::new(None),
+        };
+
+        if let Ok(exchange_info) = rest_conn.exchange_info(None).await {
+            rest_conn.exchange_info = Arc::new(Some(exchange_info));
+        };
+
+        rest_conn
+    }
+
+    /// 更新exchange_info信息
+    pub async fn update_exchange_info(&mut self) -> BiAnResult<()> {
+        match self.exchange_info(None).await {
+            Ok(exchange_info) => {
+                self.exchange_info = Arc::new(Some(exchange_info));
+                Ok(())
+            }
+            Err(e) => Err(e),
         }
     }
 
@@ -155,6 +171,7 @@ impl RestConn {
         }
     }
 
+    /// 生成完整的URL
     fn make_url<P>(&self, path: &str, params: P) -> Url
     where
         P: Serialize + Param + Debug,

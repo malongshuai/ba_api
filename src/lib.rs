@@ -1,8 +1,9 @@
+use std::env;
+
 pub mod client;
 pub mod errors;
 pub mod types;
-
-use std::env;
+pub mod utils;
 
 pub use types::account::*;
 pub use types::depth::*;
@@ -14,6 +15,11 @@ pub use types::rate_limit::*;
 pub use types::symbol_info::*;
 pub use types::ticker::*;
 pub use types::ws_response::*;
+
+pub const STABLE_COINS: [&str; 19] = [
+    "AUD", "BIDR", "BRL", "EUR", "GBP", "RUB", "TRY", "TUSD", "USDC", "DAI", "IDRT", "UAH", "NGN",
+    "VAI", "USDP", "PAX", "SUSD", "BVND", "BUSD",
+];
 
 #[macro_use]
 extern crate lazy_static;

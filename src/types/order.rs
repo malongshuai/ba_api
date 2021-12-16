@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use crate::client::option_string_to_f64;
 use crate::client::string_to_f64;
 use serde::{Deserialize, Serialize};
@@ -47,7 +49,7 @@ pub enum OrderAction {
 }
 
 /// 订单类型(参考<https://www.binance.com/cn/support/articles/360033779452-Types-of-Order>)
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum OrderType {
     /// 限价单
@@ -115,6 +117,15 @@ impl From<&str> for OrderSide {
             "SELL" => Self::Sell,
             s => panic!("`{}' unsupported Order Side", s),
         }
+    }
+}
+impl Display for OrderSide {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            OrderSide::Buy => "BUY".to_string(),
+            OrderSide::Sell => "SELL".to_string(),
+        };
+        write!(f, "{}", s)
     }
 }
 
@@ -437,57 +448,42 @@ pub struct OrderInfo {
     pub symbol: String,
     pub order_id: u64,
     pub client_order_id: String,
-
     /// OCO订单的ID，不然就是-1
     pub order_list_id: i64,
-
     /// 订单状态
     pub status: OrderStatus, // "NEW"
-
     /// 订单的时效方式
     pub time_in_force: TimeInForce,
-
     /// 订单类型， 比如市价单，现价单等
     #[serde(rename = "type")]
     pub order_type: OrderType,
-
     /// 订单方向，买还是卖
     pub side: OrderSide,
-
     /// 订单时间
     pub time: u64,
-
     /// 最后更新时间
     pub update_time: u64,
-
     /// 订单价格
     #[serde(deserialize_with = "string_to_f64")]
     pub price: f64,
-
     /// 用户设置的原始订单数量
     #[serde(deserialize_with = "string_to_f64")]
     pub orig_qty: f64,
-
     /// 已交易的数量
     #[serde(deserialize_with = "string_to_f64")]
     pub executed_qty: f64,
-
     /// 累计交易的金额
     #[serde(deserialize_with = "string_to_f64")]
     pub cummulative_quote_qty: f64,
-
     /// 止盈、止损价格
     #[serde(deserialize_with = "string_to_f64")]
     pub stop_price: f64,
-
     /// 冰山数量
     #[serde(deserialize_with = "string_to_f64")]
     pub iceberg_qty: f64,
-
     /// 原始的交易金额
     #[serde(deserialize_with = "string_to_f64")]
     pub orig_quote_order_qty: f64,
-
     /// 订单是否出现在orderbook中
     pub is_working: bool,
 }
@@ -604,10 +600,9 @@ pub struct OrderUpdate {
     #[serde(rename = "Y", deserialize_with = "string_to_f64")]
     pub last_vol: f64,
     #[serde(rename = "Q", deserialize_with = "string_to_f64")]
-    /// quote order qty
-    pub dont_know_field: f64,
+    /// 市价单时，报价资产的数量(例如市价买入BTCUSDT共100USDT时，该字段值为100.0)
+    pub quote_order_qty: f64,
 }
-
 
 #[cfg(test)]
 mod test {

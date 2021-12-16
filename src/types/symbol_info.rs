@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{account::Permission, order::OrderType, rate_limit::RateLimit};
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum SymbolStatus {
     /// 交易前
@@ -18,7 +18,7 @@ pub enum SymbolStatus {
     Break,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", tag = "filterType")]
 pub enum SymbolFilter {
     #[serde(rename = "PRICE_FILTER", rename_all = "camelCase")]
@@ -87,7 +87,7 @@ pub enum SymbolFilter {
     },
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SymbolInfo {
     pub symbol: String,
@@ -111,6 +111,30 @@ pub struct SymbolInfo {
     pub filters: Vec<SymbolFilter>,
     /// 未来会替代is_(spot|margin)_trading_allowed字段
     pub permissions: Vec<Permission>,
+}
+
+impl SymbolInfo {
+    pub fn clone_from(src: &SymbolInfo) -> SymbolInfo {
+        SymbolInfo {
+            symbol: src.symbol.clone(),
+            status: src.status.clone(),
+            filters: src.filters.clone(),
+            base_asset: src.base_asset.clone(),
+            quote_asset: src.quote_asset.clone(),
+            order_types: src.order_types.clone(),
+            permissions: src.permissions.clone(),
+            base_asset_precision: src.base_asset_precision,
+            quote_precision: src.quote_precision,
+            quote_asset_precision: src.quote_asset_precision,
+            base_commission_precision: src.base_commission_precision,
+            quote_commission_precision: src.quote_commission_precision,
+            iceberg_allowed: src.iceberg_allowed,
+            oco_allowed: src.oco_allowed,
+            quote_order_qty_market_allowed: src.quote_order_qty_market_allowed,
+            is_spot_trading_allowed: src.is_spot_trading_allowed,
+            is_margin_trading_allowed: src.is_margin_trading_allowed,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]

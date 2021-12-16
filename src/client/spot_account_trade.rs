@@ -12,6 +12,7 @@ use crate::{
         order::{CancelOpenOrdersInfo, CancelOrderInfo, MyTrades, Order, OrderInfo},
         rate_limit::RateLimitInfo,
     },
+    utils::{ExchangeInfoExt, SymbolInfoExt},
 };
 use serde::Serialize;
 use std::fmt::Debug;
@@ -29,23 +30,24 @@ impl RestConn {
         Ok(account_info)
     }
 
-    /// 现货下单接口
-    /// side: 不区分大小的 buy/sell
-    /// order_type: 订单类型，值为以下几种不区分大小写的值，不同类型的订单，强制要求提供的参数不同
-    ///   - Limit(限价单)
-    ///   - Market(市价单)
-    ///   - StopLoss(止损单)
-    ///   - StopLossLimit(限价止损单)
-    ///   - TakeProfit(止盈单)
-    ///   - TakeProfitLimit(限价止盈单)
-    ///   - LimitMaker(限价只挂单)
+    /// 现货下单接口  
+    /// side: 不区分大小的 buy/sell  
+    /// order_type: 订单类型，值为以下几种不区分大小写的值，不同类型的订单，强制要求提供的参数不同  
+    ///   - Limit(限价单)  
+    ///   - Market(市价单)  
+    ///   - StopLoss(止损单)  
+    ///   - StopLossLimit(限价止损单)  
+    ///   - TakeProfit(止盈单)  
+    ///   - TakeProfitLimit(限价止盈单)  
+    ///   - LimitMaker(限价只挂单)  
     ///
-    /// time_in_force: 订单有效方式，不区分大小写的 gtc/ioc/fok
-    /// qty: 币的数量
-    /// quote_order_qty：市价单中，报价资产的数量。例如买入BTCUSDT时，表示买入多少USDT的BTC
-    /// stop_price: 止盈止损单的止盈止损价
-    /// iceberg_qty: Limit和LimitMaker单时指定该参数，表示变成冰山单，此时time_in_force必须为GTC类型
-    /// new_order_resp_type: 指定下单后的响应信息的详细程度，值为不区分大小写的 ack/result/full
+    /// time_in_force: 订单有效方式，不区分大小写的 gtc/ioc/fok  
+    /// qty: 币的数量  
+    /// quote_order_qty：市价单中，报价资产的数量。例如买入BTCUSDT时，表示买入多少USDT的BTC  
+    /// stop_price: 止盈止损单的止盈止损价  
+    /// iceberg_qty: Limit和LimitMaker单时指定该参数，表示变成冰山单，此时time_in_force必须为GTC类型  
+    /// new_order_resp_type: 指定下单后的响应信息的详细程度，值为不区分大小写的 ack/result/full  
+    /// 如果提供了qty、price、stop_price、iceberg_qty，则可能会自动调整值的大小以适配BiAn的数量和价格筛选器规则，quote_order_qty无需调整，它是市价单时使用，币安会自动计算实时价并调整  
     #[allow(clippy::too_many_arguments)]
     #[instrument(skip(self))]
     pub async fn order(
@@ -62,6 +64,23 @@ impl RestConn {
         iceberg_qty: Option<f64>,
         new_order_resp_type: Option<&str>,
     ) -> BiAnResult<Order> {
+        // 获取交易对的信息，以便能够调整价格、数量
+        let symbol_info = self
+            .exchange_info
+            .as_ref()
+            .as_ref()
+            .unwrap()
+            .symbol_info(symbol);
+
+        let (mut price, mut qty, mut stop_price, mut iceberg_qty) =
+            (price, qty, stop_price, iceberg_qty);
+        if let Some(info) = symbol_info {
+            price = price.map(|x| info.adjust_price(x));
+            stop_price = stop_price.map(|x| info.adjust_price(x));
+            qty = qty.map(|x| info.adjust_amount(x));
+            iceberg_qty = iceberg_qty.map(|x| info.adjust_amount(x));
+        }
+
         let path = "/api/v3/order";
         let params = POrder::new(
             symbol,
@@ -76,6 +95,7 @@ impl RestConn {
             iceberg_qty,
             new_order_resp_type,
         )?;
+
         let res = self.rest_req("post", path, params).await?;
         let order_info = serde_json::from_str::<Order>(&res)?;
         Ok(order_info)

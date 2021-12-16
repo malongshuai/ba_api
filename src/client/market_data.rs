@@ -1,20 +1,22 @@
-use std::time::SystemTime;
-
-use tracing::instrument;
-
-use crate::errors::BiAnResult;
-use crate::types::depth::Depth;
-use crate::types::order::{AggTrade, HistoricalTrade, Trade};
-use crate::types::other_types::{AvgPrice, Prices, ServerTime};
-use crate::types::symbol_info::ExchangeInfo;
-use crate::types::ticker::{BookTickers, FullTickers};
-use crate::{KLineInterval, KLines};
-
-use super::params::{
-    PAggTrades, PAvgPrice, PBookTicker, PDepth, PExchangeInfo, PHistoricalTrades, PHr24, PKLine,
-    PPing, PPrice, PServerTime, PTrades,
+use {
+    super::{
+        params::{
+            PAggTrades, PAvgPrice, PBookTicker, PDepth, PExchangeInfo, PHistoricalTrades, PHr24,
+            PKLine, PPing, PPrice, PServerTime, PTrades,
+        },
+        RestConn,
+    },
+    crate::errors::BiAnResult,
+    crate::types::depth::Depth,
+    crate::types::order::{AggTrade, HistoricalTrade, Trade},
+    crate::types::other_types::{AvgPrice, Prices, ServerTime},
+    crate::types::symbol_info::ExchangeInfo,
+    crate::types::ticker::{BookTickers, FullTickers},
+    crate::{KLineInterval, KLines},
+    std::{env, error, path::Path, time::SystemTime},
+    tokio::{fs, io::AsyncReadExt},
+    tracing::instrument,
 };
-use super::RestConn;
 
 /// 行情接口
 impl RestConn {
@@ -35,6 +37,23 @@ impl RestConn {
         Ok(time_res.server_time)
     }
 
+    /// 尝试从给定文件中读取exchange_info信息，如果能读取，且该文件的mtime在半小时以内，则返回Ok(Some(ExchangeInfo))，其它返回值情况都表示读取失败或本地数据无效
+    async fn local_exchange_info(
+        exchange_info_file: &Path,
+    ) -> Result<Option<ExchangeInfo>, Box<dyn error::Error>> {
+        let mut file = fs::File::open(&exchange_info_file).await?;
+
+        let mtime = file.metadata().await?.modified()?;
+        let duration = SystemTime::now().duration_since(mtime)?.as_secs();
+        if duration > 1800 {
+            return Ok(None);
+        }
+
+        let mut buf = String::new();
+        file.read_to_string(&mut buf).await?;
+        Ok(Some(serde_json::from_str::<ExchangeInfo>(&buf)?))
+    }
+
     /// 获取交易对信息
     /// ```rust
     /// // 获取所有交易对信息
@@ -48,7 +67,16 @@ impl RestConn {
     pub async fn exchange_info(&self, symbols: Option<Vec<&str>>) -> BiAnResult<ExchangeInfo> {
         let path = "/api/v3/exchangeInfo";
         let params = PExchangeInfo::new(symbols);
+
+        // 如果本地文件已有exchange_info的信息，且文件的mtime在半小时以内，则从本地文件读取数据并返回，否则请求新数据并写入本地文件
+        let exchange_info_file = env::temp_dir().join("bian_exchange_info.json");
+        if let Ok(Some(exchange_info)) = Self::local_exchange_info(&exchange_info_file).await {
+            return Ok(exchange_info);
+        }
+
         let res = self.rest_req("get", path, params).await?;
+        if fs::write(&exchange_info_file, res.as_bytes()).await.is_ok() {}
+
         let exchange_info = serde_json::from_str::<ExchangeInfo>(&res)?;
         Ok(exchange_info)
     }
@@ -108,7 +136,7 @@ impl RestConn {
     }
 
     /// 获取K线列表  
-    /// 
+    ///
     /// interval: 1m 3m 5m 15m 30m 1h 2h 4h 6h 8h 12h 1d 3d 1w 1M，  
     /// limit为None时默认返回最近500条信息，最大值1000，  
     /// start_time太小时，自动调整为币安的第一根K线时间，  
@@ -130,8 +158,8 @@ impl RestConn {
         let mut klines = serde_json::from_str::<KLines>(&res)?;
 
         for kl in &mut klines {
-          kl.symbol = symbol.to_string();
-          kl.interval = KLineInterval::from(interval);
+            kl.symbol = symbol.to_string();
+            kl.interval = KLineInterval::from(interval);
         }
 
         // 如果最后一根K线的close_epoch大于当前时间(延迟3秒)，则认为这根K线未完成

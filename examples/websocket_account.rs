@@ -21,7 +21,12 @@ async fn main() {
 #[allow(dead_code)]
 async fn websocket() {
     // 创建http连接
-    let rest_conn = RestConn::new(API_KEY.to_string(), SEC_KEY.to_string(), Some("http://127.0.0.1:8118".to_string()));
+    let rest_conn = RestConn::new(
+        API_KEY.to_string(),
+        SEC_KEY.to_string(),
+        Some("http://127.0.0.1:8118".to_string()),
+    )
+    .await;
 
     // 生成一个ListenKey以便使用websocket订阅账户更新信息
     let listen_key = rest_conn.new_spot_listen_key().await.unwrap();
