@@ -1,5 +1,7 @@
+use std::collections::HashMap;
+
 use crate::client::string_to_f64;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 /// 交易权限
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
@@ -22,8 +24,52 @@ pub enum AccountType {
 }
 
 /// 账户余额信息
-#[derive(Debug, Deserialize, Serialize)]
-pub struct Balances(pub Vec<Balance>);
+#[derive(Debug, Default, Deserialize, Serialize)]
+pub struct RawBalance {
+    /// 可用的资产数量
+    pub free: f64,
+
+    /// 冻结的资产数量
+    pub locked: f64,
+}
+
+impl RawBalance {
+    pub fn new() -> Self {
+        RawBalance::default()
+    }
+}
+
+/// 账户余额信息
+#[derive(Debug, Default, Deserialize, Serialize)]
+// pub struct Balances(pub Vec<Balance>);
+pub struct Balances(
+    #[serde(deserialize_with = "vec_balance_to_map")] pub HashMap<String, RawBalance>,
+);
+
+impl Balances {
+    pub fn new() -> Balances {
+        Self::default()
+    }
+}
+
+fn vec_balance_to_map<'de, D>(deserializer: D) -> Result<HashMap<String, RawBalance>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let mut hash: HashMap<String, RawBalance> = HashMap::new();
+    let x: Vec<Balance> = Vec::deserialize(deserializer)?;
+    for i in &x {
+        hash.insert(
+            i.asset.to_string(),
+            RawBalance {
+                free: i.free,
+                locked: i.locked,
+            },
+        );
+    }
+
+    Ok(hash)
+}
 
 /// 账户余额信息
 #[derive(Debug, Deserialize, Serialize)]
@@ -75,16 +121,16 @@ struct RestBalance {
 
 #[derive(Debug, Deserialize, Serialize)]
 struct WebSocketBalance {
-    #[serde(rename = "a")]
+    #[serde(rename(deserialize = "a"))]
     asset: String,
 
     /// 可用的资产数量
-    #[serde(rename = "f")]
+    #[serde(rename(deserialize = "f"))]
     #[serde(deserialize_with = "string_to_f64")]
     free: f64,
 
     /// 冻结的资产数量
-    #[serde(rename = "l")]
+    #[serde(rename(deserialize = "l"))]
     #[serde(deserialize_with = "string_to_f64")]
     locked: f64,
 }
@@ -125,4 +171,43 @@ pub struct Account {
 pub struct ListenKey {
     #[serde(default)]
     pub listen_key: String,
+}
+
+#[cfg(test)]
+mod test_account {
+    use super::*;
+    #[test]
+    fn account_serde_test() {
+        let str = r##"
+            {
+              "makerCommission": 15,
+              "takerCommission": 15,
+              "buyerCommission": 0,
+              "sellerCommission": 0,
+              "canTrade": true,
+              "canWithdraw": true,
+              "canDeposit": true,
+              "updateTime": 123456789,
+              "accountType": "SPOT",
+              "balances": [
+                {
+                  "asset": "BTC",
+                  "free": "4723846.89208129",
+                  "locked": "0.00000000"
+                },
+                {
+                  "asset": "LTC",
+                  "free": "4763368.68006011",
+                  "locked": "0.00000000"
+                }
+              ],
+              "permissions": [
+                "SPOT"
+              ]
+            }
+        "##;
+        let res = serde_json::from_str::<Account>(str);
+        println!("{:?}", res);
+        assert!(res.is_ok());
+    }
 }

@@ -6,6 +6,7 @@ use crate::client::string_to_f64;
 use crate::KLine;
 use serde::{Deserialize, Deserializer, Serialize};
 
+#[allow(dead_code)]
 fn flatten_balance<'de, D>(deserializer: D) -> Result<Balances, D::Error>
 where
     D: Deserializer<'de>,
@@ -17,6 +18,20 @@ where
     }
 
     Ok(WrapBalance::deserialize(deserializer)?.balances)
+}
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+pub struct WsBalances {
+    #[serde(rename(deserialize = "u"))]
+    pub event_time: u64,
+    #[serde(rename(deserialize = "B"))]
+    pub balances: Balances,
+}
+
+impl WsBalances {
+    pub fn new() -> WsBalances {
+        Self::default()
+    }
 }
 
 /// 余额更新信息(例如充值、提现、划转)
@@ -39,8 +54,9 @@ pub enum WebSocketAccount {
 
     /// 账户余额更新(例如订单成交)
     #[serde(rename = "outboundAccountPosition")]
-    #[serde(deserialize_with = "flatten_balance")]
-    OutboundAccountPosition(Balances),
+    // #[serde(deserialize_with = "flatten_balance")]
+    // OutboundAccountPosition(Balances),
+    OutboundAccountPosition(WsBalances),
 
     /// 订单更新
     #[serde(rename = "executionReport")]
@@ -100,6 +116,11 @@ mod account_test {
                   "a": "ETH",
                   "f": "10000.000000",
                   "l": "0.000000"
+                },
+                {
+                  "a": "BTC",
+                  "f": "2.00",
+                  "l": "1.445"
                 }
               ]
             }

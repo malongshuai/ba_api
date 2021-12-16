@@ -144,7 +144,8 @@ impl RestConn {
         }
     }
 
-    fn get_exchange_info(&self) -> Option<&ExchangeInfo> {
+    /// 获取交易对信息
+    pub fn get_exchange_info(&self) -> Option<&ExchangeInfo> {
         self.exchange_info.as_ref().as_ref()
     }
 

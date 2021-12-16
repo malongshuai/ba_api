@@ -1,4 +1,4 @@
-use crate::{Account, Balances};
+use crate::{Account, Balances, RawBalance};
 
 /// 为账户提供一些便捷的方法
 pub trait AccountExt {
@@ -6,16 +6,16 @@ pub trait AccountExt {
     fn maker_fee(&self) -> f64;
 
     /// 返回某个币的余额信息，包含已冻结和空闲可用的余额，返回值`(free, locked)`
-    fn coin_balance(&self, coin: &str) -> (f64, f64);
+    fn coin_balance(&self, coin: &str) -> RawBalance;
 
     /// 返回某个币空闲可用的资产余额
     fn coin_balance_free(&self, coin: &str) -> f64 {
-        self.coin_balance(coin).0
+        self.coin_balance(coin).free
     }
 
     /// 返回某个币已冻结的资产余额
     fn coin_balance_locked(&self, coin: &str) -> f64 {
-        self.coin_balance(coin).1
+        self.coin_balance(coin).locked
     }
 }
 
@@ -27,7 +27,7 @@ impl AccountExt for Account {
     }
 
     /// 返回某个币的余额信息，包含已冻结和空闲可用的余额
-    fn coin_balance(&self, coin: &str) -> (f64, f64) {
+    fn coin_balance(&self, coin: &str) -> RawBalance {
         self.balances.coin_balance(coin)
     }
 }
@@ -35,29 +35,28 @@ impl AccountExt for Account {
 /// 为获取账户余额提供一些便捷的方法
 pub trait BalancesExt {
     /// 返回某个币的余额信息，包含已冻结和空闲可用的余额，返回值`(free, locked)`
-    fn coin_balance(&self, coin: &str) -> (f64, f64);
+    fn coin_balance(&self, coin: &str) -> RawBalance;
 
     /// 返回某个币空闲可用的资产余额
     fn coin_balance_free(&self, coin: &str) -> f64 {
-        self.coin_balance(coin).0
+        self.coin_balance(coin).free
     }
 
     /// 返回某个币已冻结的资产余额
     fn coin_balance_locked(&self, coin: &str) -> f64 {
-        self.coin_balance(coin).1
+        self.coin_balance(coin).locked
     }
 }
 
 impl BalancesExt for Balances {
     /// 返回某个币的余额信息，包含已冻结和空闲可用的余额，返回值`(free, locked)`
-    fn coin_balance(&self, coin: &str) -> (f64, f64) {
-        let res = self
-            .0
-            .iter()
-            .find(|e| e.asset.to_lowercase() == coin.to_lowercase());
-        match res {
-            Some(x) => (x.free, x.locked),
-            None => (0.0, 0.0),
+    fn coin_balance(&self, coin: &str) -> RawBalance {
+        let mut res = RawBalance::new();
+        if let Some(d) = self.0.get(coin) {
+            res.free = d.free;
+            res.locked = d.locked;
         }
+
+        res
     }
 }
