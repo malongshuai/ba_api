@@ -12,7 +12,7 @@ use crate::{
         order::{CancelOpenOrdersInfo, CancelOrderInfo, MyTrades, Order, OrderInfo},
         rate_limit::RateLimitInfo,
     },
-    utils::{ExchangeInfoExt, SymbolInfoExt},
+    utils::SymbolInfoExt,
 };
 use serde::Serialize;
 use std::fmt::Debug;
@@ -64,17 +64,9 @@ impl RestConn {
         iceberg_qty: Option<f64>,
         new_order_resp_type: Option<&str>,
     ) -> BiAnResult<Order> {
-        // 获取交易对的信息，以便能够调整价格、数量
-        let symbol_info = self
-            .exchange_info
-            .as_ref()
-            .as_ref()
-            .unwrap()
-            .symbol_info(symbol);
-
         let (mut price, mut qty, mut stop_price, mut iceberg_qty) =
             (price, qty, stop_price, iceberg_qty);
-        if let Some(info) = symbol_info {
+        if let Some(info) = self.symbol_info(symbol) {
             price = price.map(|x| info.adjust_price(x));
             stop_price = stop_price.map(|x| info.adjust_price(x));
             qty = qty.map(|x| info.adjust_amount(x));

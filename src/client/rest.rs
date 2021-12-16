@@ -1,6 +1,7 @@
 use crate::{
     errors::{BadRequest, BiAnApiError, BiAnResult, MethodError},
-    ExchangeInfo, REST_BASE_URL,
+    utils::ExchangeInfoExt,
+    ExchangeInfo, SymbolInfo, REST_BASE_URL,
 };
 use reqwest::{header, Url};
 use serde::Serialize;
@@ -140,6 +141,20 @@ impl RestConn {
                 Ok(())
             }
             Err(e) => Err(e),
+        }
+    }
+
+    fn get_exchange_info(&self) -> Option<&ExchangeInfo> {
+        self.exchange_info.as_ref().as_ref()
+    }
+
+    /// 获取交易对的信息，以便能够调整价格、数量
+    pub fn symbol_info(&self, symbol: &str) -> Option<SymbolInfo> {
+        match self.get_exchange_info() {
+            Some(ex_info) => ex_info
+                .symbol_info(symbol)
+                .map(|s| SymbolInfo::clone_from(s)),
+            None => None,
         }
     }
 
