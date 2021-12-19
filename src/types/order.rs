@@ -5,7 +5,7 @@ use crate::client::string_to_f64;
 use serde::{Deserialize, Serialize};
 
 /// 订单状态
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum OrderStatus {
     /// 订单请求被接受，即挂单成功
@@ -31,7 +31,7 @@ pub enum OrderStatus {
 }
 
 /// 订单被触发了什么操作
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum OrderAction {
     /// 创建新订单的操作
@@ -103,7 +103,7 @@ impl From<&str> for OrderRespType {
 }
 
 /// 订单方向
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum OrderSide {
     Buy,
@@ -130,7 +130,7 @@ impl Display for OrderSide {
 }
 
 /// 订单有效方式(订单何时失效)
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum TimeInForce {
     /// 订单一直有效，直到订单完全成交或被撤单
     GTC,
@@ -378,6 +378,26 @@ pub enum Order {
     RespAck(RespAck),
 }
 
+impl Order {
+    /// 从返回的订单信息中获取Order ID
+    pub fn order_id(&self) -> u64 {
+        match self {
+            Order::RespFull(d) => d.result.order_id,
+            Order::RespResult(d) => d.order_id,
+            Order::RespAck(d) => d.order_id,
+        }
+    }
+
+    /// 从返回的订单信息中获取Symbol
+    pub fn symbol(&self) -> String {
+        match self {
+            Order::RespFull(d) => d.result.symbol.clone(),
+            Order::RespResult(d) => d.symbol.clone(),
+            Order::RespAck(d) => d.symbol.clone(),
+        }
+    }
+}
+
 /// 普通订单取消的信息
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -442,7 +462,7 @@ pub enum CancelOpenOrdersInfo {
 }
 
 /// 订单信息
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OrderInfo {
     pub symbol: String,
@@ -521,87 +541,96 @@ pub struct MyTrades {
 }
 
 /// 订单更新信息(来自WebSocket的推送)
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct OrderUpdate {
-    #[serde(rename = "s")]
+    #[serde(rename(deserialize = "s"))]
     pub symbol: String,
-    #[serde(rename = "c")]
+    #[serde(rename(deserialize = "c"))]
     pub client_order_id: String,
-    #[serde(rename = "S")]
+    #[serde(rename(deserialize = "S"))]
     pub side: OrderSide,
-    #[serde(rename = "o")]
+    #[serde(rename(deserialize = "o"))]
     pub order_type: OrderType,
-    #[serde(rename = "f")]
+    #[serde(rename(deserialize = "f"))]
     pub time_in_force: TimeInForce,
     /// 订单原始数量
-    #[serde(rename = "q", deserialize_with = "string_to_f64")]
+    #[serde(rename(deserialize = "q"), deserialize_with = "string_to_f64")]
     pub qty: f64,
     /// 订单原始价格
-    #[serde(rename = "p", deserialize_with = "string_to_f64")]
+    #[serde(rename(deserialize = "p"), deserialize_with = "string_to_f64")]
     pub price: f64,
     /// 订单止盈、止损价格
-    #[serde(rename = "P", deserialize_with = "string_to_f64")]
+    #[serde(rename(deserialize = "P"), deserialize_with = "string_to_f64")]
     pub stop_price: f64,
     /// 冰山单数量
-    #[serde(rename = "F", deserialize_with = "string_to_f64")]
+    #[serde(rename(deserialize = "F"), deserialize_with = "string_to_f64")]
     pub iceberg_qty: f64,
     /// OCO订单ID
-    #[serde(rename = "g")]
+    #[serde(rename(deserialize = "g"))]
     pub order_list_id: i64,
     /// 原始订单的client order id，撤单操作有自己的cid
-    #[serde(rename = "C")]
+    #[serde(rename(deserialize = "C"))]
     pub orig_client_order_id: String,
     /// 触发推送该订单信息的操作
-    #[serde(rename = "x")]
+    #[serde(rename(deserialize = "x"))]
     pub order_action: OrderAction,
     /// 订单的状态
-    #[serde(rename = "X")]
+    #[serde(rename(deserialize = "X"))]
     pub order_status: OrderStatus,
     /// 订单被拒绝的原因
-    #[serde(rename = "r")]
+    #[serde(rename(deserialize = "r"))]
     pub reason: String,
     /// 订单ID
-    #[serde(rename = "i")]
+    #[serde(rename(deserialize = "i"))]
     pub order_id: u64,
     /// 订单末次成交量
-    #[serde(rename = "l", deserialize_with = "string_to_f64")]
+    #[serde(rename(deserialize = "l"), deserialize_with = "string_to_f64")]
     pub last_qty: f64,
     /// 订单已累计的成交量
-    #[serde(rename = "z", deserialize_with = "string_to_f64")]
+    #[serde(rename(deserialize = "z"), deserialize_with = "string_to_f64")]
     pub cummulative_qty: f64,
     /// 订单末次成交价
-    #[serde(rename = "L", deserialize_with = "string_to_f64")]
+    #[serde(rename(deserialize = "L"), deserialize_with = "string_to_f64")]
     pub last_price: f64,
     /// 手续费数量
-    #[serde(rename = "n", deserialize_with = "string_to_f64")]
+    #[serde(rename(deserialize = "n"), deserialize_with = "string_to_f64")]
     pub fee_qty: f64,
     /// 手续费资产名称，不产生手续费的订单状态(例如挂单和完全未成交的撤单)其值为null，可能为字符串
-    #[serde(rename = "N")]
+    #[serde(rename(deserialize = "N"))]
     pub fee_quote: Option<String>,
     /// 该成交的成交时间
-    #[serde(rename = "T")]
+    #[serde(rename(deserialize = "T"))]
     pub trade_time: u64,
     /// 该成交的成交ID(trade ID)
-    #[serde(rename = "t")]
+    #[serde(rename(deserialize = "t"))]
     pub trade_id: i64,
     /// 订单是否在订单薄上
-    #[serde(rename = "w")]
+    #[serde(rename(deserialize = "w"))]
     pub in_order_book: bool,
     /// 该成交是否是作为挂单成交(是否是maker方)
-    #[serde(rename = "m")]
+    #[serde(rename(deserialize = "m"))]
     pub maker: bool,
     /// 订单创建时间
-    #[serde(rename = "O")]
+    #[serde(rename(deserialize = "O"))]
     pub order_create_time: u64,
     /// 订单累计成交额
-    #[serde(rename = "Z", deserialize_with = "string_to_f64")]
+    #[serde(rename(deserialize = "Z"), deserialize_with = "string_to_f64")]
     pub cummulative_vol: f64,
     /// 订单末次成交额
-    #[serde(rename = "Y", deserialize_with = "string_to_f64")]
+    #[serde(rename(deserialize = "Y"), deserialize_with = "string_to_f64")]
     pub last_vol: f64,
-    #[serde(rename = "Q", deserialize_with = "string_to_f64")]
+    #[serde(rename(deserialize = "Q"), deserialize_with = "string_to_f64")]
     /// 市价单时，报价资产的数量(例如市价买入BTCUSDT共100USDT时，该字段值为100.0)
     pub quote_order_qty: f64,
+}
+
+impl OrderUpdate {
+    pub fn is_finished(&self) -> bool {
+        matches!(
+            self.order_status,
+            OrderStatus::Canceled | OrderStatus::Filled
+        )
+    }
 }
 
 #[cfg(test)]

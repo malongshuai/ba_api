@@ -113,30 +113,6 @@ pub struct SymbolInfo {
     pub permissions: Vec<Permission>,
 }
 
-impl SymbolInfo {
-    pub fn clone_from(src: &SymbolInfo) -> SymbolInfo {
-        SymbolInfo {
-            symbol: src.symbol.clone(),
-            status: src.status.clone(),
-            filters: src.filters.clone(),
-            base_asset: src.base_asset.clone(),
-            quote_asset: src.quote_asset.clone(),
-            order_types: src.order_types.clone(),
-            permissions: src.permissions.clone(),
-            base_asset_precision: src.base_asset_precision,
-            quote_precision: src.quote_precision,
-            quote_asset_precision: src.quote_asset_precision,
-            base_commission_precision: src.base_commission_precision,
-            quote_commission_precision: src.quote_commission_precision,
-            iceberg_allowed: src.iceberg_allowed,
-            oco_allowed: src.oco_allowed,
-            quote_order_qty_market_allowed: src.quote_order_qty_market_allowed,
-            is_spot_trading_allowed: src.is_spot_trading_allowed,
-            is_margin_trading_allowed: src.is_margin_trading_allowed,
-        }
-    }
-}
-
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExchangeInfo {

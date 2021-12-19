@@ -24,7 +24,7 @@ pub enum AccountType {
 }
 
 /// 账户余额信息
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct RawBalance {
     /// 可用的资产数量
     pub free: f64,
@@ -40,7 +40,7 @@ impl RawBalance {
 }
 
 /// 账户余额信息
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 // pub struct Balances(pub Vec<Balance>);
 pub struct Balances(
     #[serde(deserialize_with = "vec_balance_to_map")] pub HashMap<String, RawBalance>,
@@ -49,6 +49,10 @@ pub struct Balances(
 impl Balances {
     pub fn new() -> Balances {
         Self::default()
+    }
+
+    pub fn get_balance(&self, coin: String) -> RawBalance {
+        self.0.get(&coin).cloned().unwrap_or_default()
     }
 }
 

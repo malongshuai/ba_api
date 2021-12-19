@@ -152,9 +152,7 @@ impl RestConn {
     /// 获取交易对的信息，以便能够调整价格、数量
     pub fn symbol_info(&self, symbol: &str) -> Option<SymbolInfo> {
         match self.get_exchange_info() {
-            Some(ex_info) => ex_info
-                .symbol_info(symbol)
-                .map(|s| SymbolInfo::clone_from(s)),
+            Some(ex_info) => ex_info.symbol_info(symbol).cloned(),
             None => None,
         }
     }

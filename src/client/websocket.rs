@@ -210,6 +210,9 @@ impl WsClient {
     /// ```
     pub async fn ws_client(&mut self, data_sender: mpsc::Sender<String>) -> BiAnResult<()> {
         loop {
+            if data_sender.is_closed() {
+                break;
+            }
             tokio::select! {
                 Some(msg) = self.ws.conn_stream.next() => {
                     match msg {
