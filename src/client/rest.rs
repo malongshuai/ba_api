@@ -1,4 +1,6 @@
 use crate::{
+    api_rate_limit::APIRateLimit,
+    client::params::PRateLimit,
     errors::{BadRequest, BiAnApiError, BiAnResult, MethodError},
     utils::ExchangeInfoExt,
     ExchangeInfo, SymbolInfo, REST_BASE_URL,
@@ -85,6 +87,7 @@ pub struct RestConn {
     api_key: String,
     sec_key: String,
     base_url: Url,
+    rate_limit: APIRateLimit,
     pub exchange_info: Arc<Option<ExchangeInfo>>,
 }
 
@@ -123,6 +126,7 @@ impl RestConn {
             api_key,
             sec_key,
             base_url: Url::parse(*REST_BASE_URL).unwrap(),
+            rate_limit: APIRateLimit::new().await,
             exchange_info: Arc::new(None),
         };
 
@@ -186,7 +190,7 @@ impl RestConn {
     }
 
     /// 生成完整的URL
-    fn make_url<P>(&self, path: &str, params: P) -> Url
+    fn make_url<P>(&self, path: &str, params: &P) -> Url
     where
         P: Serialize + Param + Debug,
     {
@@ -235,14 +239,32 @@ impl RestConn {
     ///  limit: Some(5u16),
     ///};
     ///
-    ///let body = rest_conn.rest_req("get", pkline_path, pkline).await.unwrap();
+    ///let body = rest_conn.rest_req("get", pkline_path, pkline, Some(1)).await.unwrap();
     ///```
     #[tracing::instrument(skip(self))]
-    pub async fn rest_req<P>(&self, method: &str, path: &str, params: P) -> BiAnResult<RespBody>
+    pub async fn rest_req<P>(
+        &self,
+        method: &str,
+        path: &str,
+        params: P,
+        rate_limit: Option<usize>,
+    ) -> BiAnResult<RespBody>
     where
         P: Serialize + Param + Debug,
     {
-        let url = self.make_url(path, params);
+        let url = self.make_url(path, &params);
+
+        // 获取限速值
+        if let Some(n) = rate_limit {
+            match params.rate_limit() {
+                PRateLimit::ApiIp => {
+                    self.rate_limit.get_ip_permit(n).await;
+                }
+                PRateLimit::ApiUid => {
+                    self.rate_limit.get_uid_permit(n).await;
+                }
+            }
+        }
 
         // 不重连的方案
         // let mut resp = match RestMethod::from_str(method)? {
@@ -290,9 +312,35 @@ impl RestConn {
         let head = resp.headers();
         // println!("header: {:?}", head);
         // println!( "+ weight +{:?} {:?}", head.get("x-mbx-used-weight"), head.get("x-mbx-used-weight-1m") );
-        println!( "+ weight +{:?} {:?}", head.get("x-mbx-order-count-10s"), head.get("x-mbx-order-count-1d") );
+        // println!( "+ weight +{:?} {:?}", head.get("x-mbx-order-count-10s"), head.get("x-mbx-order-count-1d") );
+
+        // 将返回的已用权重值设置到当前的剩余权重中
+        self.set_rate_limit(head).await;
 
         resp = Self::check_rest_resp(resp).await?;
         Ok(resp.text().await.unwrap())
+    }
+
+    async fn set_rate_limit(&self, head: &header::HeaderMap) {
+        // 此为`/api/*`的IP限速
+        if let Some(used) = self.extract_weigth_header("x-mbx-used-weight-1m", head) {
+            self.rate_limit.set_ip_permit(used).await;
+        }
+        // 此为`/api/*`的UID限速
+        if let (Some(sec_used), Some(day_used)) = (
+            self.extract_weigth_header("x-mbx-order-count-10s", head),
+            self.extract_weigth_header("x-mbx-order-count-1d", head),
+        ) {
+            self.rate_limit.set_uid_permit(sec_used, day_used).await;
+        }
+    }
+
+    fn extract_weigth_header(&self, key: &str, head: &header::HeaderMap) -> Option<usize> {
+        if let Some(weight) = head.get(key) {
+            if let Ok(used) = weight.to_str() {
+                return used.parse::<usize>().ok();
+            }
+        }
+        None
     }
 }

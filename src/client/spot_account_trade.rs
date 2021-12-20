@@ -25,7 +25,7 @@ impl RestConn {
     pub async fn account(&self) -> BiAnResult<Account> {
         let path = "/api/v3/account";
         let params = PAccount;
-        let res = self.rest_req("get", path, params).await?;
+        let res = self.rest_req("get", path, params, Some(10)).await?;
         let account_info = serde_json::from_str::<Account>(&res)?;
         Ok(account_info)
     }
@@ -88,7 +88,7 @@ impl RestConn {
             new_order_resp_type,
         )?;
 
-        let res = self.rest_req("post", path, params).await?;
+        let res = self.rest_req("post", path, params, Some(1)).await?;
         let order_info = serde_json::from_str::<Order>(&res)?;
         Ok(order_info)
     }
@@ -144,7 +144,7 @@ impl RestConn {
         let path = "/api/v3/order";
         let params =
             PCancelOrder::new(symbol, order_id, orig_client_order_id, new_client_order_id)?;
-        let res = self.rest_req("delete", path, params).await?;
+        let res = self.rest_req("delete", path, params, Some(1)).await?;
         let cancel = serde_json::from_str::<CancelOrderInfo>(&res)?;
         Ok(cancel)
     }
@@ -154,7 +154,7 @@ impl RestConn {
     pub async fn cancel_open_orders(&self, symbol: &str) -> BiAnResult<Vec<CancelOpenOrdersInfo>> {
         let path = "/api/v3/openOrders";
         let params = PCancelOpenOrders::new(symbol)?;
-        let res = self.rest_req("delete", path, params).await?;
+        let res = self.rest_req("delete", path, params, Some(1)).await?;
         let cancel = serde_json::from_str::<Vec<CancelOpenOrdersInfo>>(&res)?;
         Ok(cancel)
     }
@@ -169,7 +169,7 @@ impl RestConn {
     ) -> BiAnResult<OrderInfo> {
         let path = "/api/v3/order";
         let params = PGetOrder::new(symbol, order_id, orig_client_order_id)?;
-        let res = self.rest_req("get", path, params).await?;
+        let res = self.rest_req("get", path, params, Some(2)).await?;
         let order_info = serde_json::from_str::<OrderInfo>(&res)?;
         Ok(order_info)
     }
@@ -179,7 +179,7 @@ impl RestConn {
     pub async fn get_open_orders(&self, symbol: &str) -> BiAnResult<Vec<OrderInfo>> {
         let path = "/api/v3/openOrders";
         let params = PGetOpenOrders::new(symbol)?;
-        let res = self.rest_req("get", path, params).await?;
+        let res = self.rest_req("get", path, params, Some(3)).await?;
         let open_orders_info = serde_json::from_str::<Vec<OrderInfo>>(&res)?;
         Ok(open_orders_info)
     }
@@ -196,7 +196,7 @@ impl RestConn {
     ) -> BiAnResult<Vec<OrderInfo>> {
         let path = "/api/v3/allOrders";
         let params = PAllOrders::new(symbol, order_id, start_time, end_time, limit)?;
-        let res = self.rest_req("get", path, params).await?;
+        let res = self.rest_req("get", path, params, Some(10)).await?;
         let all_orders_info = serde_json::from_str::<Vec<OrderInfo>>(&res)?;
         Ok(all_orders_info)
     }
@@ -214,7 +214,7 @@ impl RestConn {
     ) -> BiAnResult<Vec<MyTrades>> {
         let path = "/api/v3/myTrades";
         let params = PMyTrades::new(symbol, order_id, start_time, end_time, from_id, limit)?;
-        let res = self.rest_req("get", path, params).await?;
+        let res = self.rest_req("get", path, params, Some(10)).await?;
         let trades_info = serde_json::from_str::<Vec<MyTrades>>(&res)?;
         Ok(trades_info)
     }
@@ -224,7 +224,7 @@ impl RestConn {
     pub async fn rate_limit_info(&self) -> BiAnResult<Vec<RateLimitInfo>> {
         let path = "/api/v3/rateLimit/order";
         let params = PRateLimitInfo;
-        let res = self.rest_req("get", path, params).await?;
+        let res = self.rest_req("get", path, params, Some(20)).await?;
         let rate_limit_info = serde_json::from_str::<Vec<RateLimitInfo>>(&res)?;
         Ok(rate_limit_info)
     }
@@ -253,7 +253,7 @@ impl RestConn {
             _ => panic!("error action, valid action: post/put/delete"),
         };
 
-        let res = self.rest_req(method, path, params).await?;
+        let res = self.rest_req(method, path, params, Some(1)).await?;
         let listen_key = serde_json::from_str::<ListenKey>(&res)?;
         Ok(listen_key.listen_key)
     }

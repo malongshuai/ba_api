@@ -26,6 +26,13 @@ pub enum CheckType {
     UserData,
 }
 
+pub enum PRateLimit {
+    /// /api/*接口的IP限速方式
+    ApiIp,
+    /// /api/*接口的UID限速方式
+    ApiUid,
+}
+
 /// 实现Param Trait，指定鉴权和签名类型，参考`CheckType`，
 /// 参数除了实现该Trait，还需实现Serialize Trait，
 /// 如果是不需要参数的请求，则定义空的Struct并实现这两个Trait即可。
@@ -33,6 +40,11 @@ pub trait Param {
     /// 是否需要鉴权和签名，默认为`CheckType::None`
     fn check_type(&self) -> CheckType {
         CheckType::None
+    }
+
+    /// 请求的限速规则
+    fn rate_limit(&self) -> PRateLimit {
+        PRateLimit::ApiIp
     }
 }
 
@@ -458,6 +470,10 @@ impl POrder {
 impl Param for POrder {
     fn check_type(&self) -> CheckType {
         CheckType::Trade
+    }
+
+    fn rate_limit(&self) -> PRateLimit {
+        PRateLimit::ApiUid
     }
 }
 
