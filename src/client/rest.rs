@@ -287,8 +287,10 @@ impl RestConn {
             };
         }?;
 
-        // let head = resp.headers();
+        let head = resp.headers();
+        // println!("header: {:?}", head);
         // println!( "+ weight +{:?} {:?}", head.get("x-mbx-used-weight"), head.get("x-mbx-used-weight-1m") );
+        println!( "+ weight +{:?} {:?}", head.get("x-mbx-order-count-10s"), head.get("x-mbx-order-count-1d") );
 
         resp = Self::check_rest_resp(resp).await?;
         Ok(resp.text().await.unwrap())
