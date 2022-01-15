@@ -10,7 +10,7 @@ use tokio_tungstenite::{
     },
     MaybeTlsStream, WebSocketStream,
 };
-use tracing::{debug, error};
+use tracing::{debug, error, warn};
 
 use crate::{
     errors::{BiAnApiError, BiAnResult},
@@ -217,9 +217,7 @@ impl WsClient {
                 Some(msg) = self.ws.conn_stream.next() => {
                     match msg {
                         Ok(msg) => self.handle_msg(msg, data_sender.clone()).await?,
-                        Err(_) => {
-                            debug!("ws closed: {}", self.names.join(","));
-                        }
+                        Err(_) => warn!("ws closed: {}", self.names.join(","))
                     }
                 },
                 Some(data) = self.rx.recv() => {

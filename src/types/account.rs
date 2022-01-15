@@ -41,7 +41,6 @@ impl RawBalance {
 
 /// 账户余额信息
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
-// pub struct Balances(pub Vec<Balance>);
 pub struct Balances(
     #[serde(deserialize_with = "vec_balance_to_map")] pub HashMap<String, RawBalance>,
 );
@@ -53,6 +52,13 @@ impl Balances {
 
     pub fn get_balance(&self, coin: String) -> RawBalance {
         self.0.get(&coin).cloned().unwrap_or_default()
+    }
+
+    /// 将另一个Balances合并到当前余额
+    pub fn merge_balance(&mut self, balances: Balances) {
+        for (key, value) in balances.0 {
+            self.0.insert(key, value);
+        }
     }
 }
 

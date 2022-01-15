@@ -45,7 +45,7 @@ impl RestConn {
 
         let mtime = file.metadata().await?.modified()?;
         let duration = SystemTime::now().duration_since(mtime)?.as_secs();
-        if duration > 1800 {
+        if duration > 86400 {
             return Ok(None);
         }
 
@@ -69,13 +69,19 @@ impl RestConn {
         let params = PExchangeInfo::new(symbols);
 
         // 如果本地文件已有exchange_info的信息，且文件的mtime在半小时以内，则从本地文件读取数据并返回，否则请求新数据并写入本地文件
-        let exchange_info_file = env::temp_dir().join("bian_exchange_info.json");
-        if let Ok(Some(exchange_info)) = Self::local_exchange_info(&exchange_info_file).await {
-            return Ok(exchange_info);
+        let bian_dir = env::temp_dir().join("bian");
+        let exchange_info_file = bian_dir.join("exchange_info.json");
+        let c_res = fs::create_dir_all(&bian_dir).await;
+        if c_res.is_ok() {
+            if let Ok(Some(exchange_info)) = Self::local_exchange_info(&exchange_info_file).await {
+                return Ok(exchange_info);
+            }
         }
 
         let res = self.rest_req("get", path, params, Some(10)).await?;
-        if fs::write(&exchange_info_file, res.as_bytes()).await.is_ok() {}
+        if c_res.is_ok() {
+            if fs::write(&exchange_info_file, res.as_bytes()).await.is_ok() {}
+        }
 
         let exchange_info = serde_json::from_str::<ExchangeInfo>(&res)?;
         Ok(exchange_info)

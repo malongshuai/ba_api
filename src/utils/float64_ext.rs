@@ -17,8 +17,9 @@ pub trait FloatTruncate {
 impl FloatTruncate for f64 {
     /// 将浮点数截断到指定小数位数，例如`123.45678.truncate(3) == 123.456`
     fn truncate(&self, len: u8) -> f64 {
-        let l = len.into();
-        (self * 10f64.powi(len.into())).floor().trunc() / 10f64.powi(l)
+        let l: i32 = len.into();
+        let power = 10f64.powi(l);
+        (self * power).trunc() / power
     }
 }
 

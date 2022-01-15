@@ -44,7 +44,7 @@ pub mod api_rate_limit {
     use chrono::{Timelike, Utc};
     use std::{sync::Arc, time::Duration};
     use tokio::{sync::RwLock, task, time};
-    use tracing::trace;
+    use tracing::{trace};
     /// IP限频，除了下单操作，都采用IP限频规则
     #[derive(Debug)]
     struct IPRateLimit {
@@ -78,7 +78,10 @@ pub mod api_rate_limit {
             if used > Self::MAX {
                 return false;
             }
-            self.remain = Self::MAX - used;
+            let left = Self::MAX - used;
+            if left < self.remain {
+                self.remain = left;
+            }
             true
         }
     }
@@ -128,7 +131,10 @@ pub mod api_rate_limit {
             if used > Self::MAX {
                 return false;
             }
-            self.remain = Self::MAX - used;
+            let left = Self::MAX - used;
+            if left < self.remain {
+                self.remain = left;
+            }
             true
         }
     }
@@ -166,7 +172,10 @@ pub mod api_rate_limit {
             if used > Self::MAX {
                 return false;
             }
-            self.remain = Self::MAX - used;
+            let left = Self::MAX - used;
+            if left < self.remain {
+                self.remain = left;
+            }
             true
         }
     }
@@ -214,7 +223,7 @@ pub mod api_rate_limit {
         fn set_secs(&mut self, used: usize) -> bool {
             self.secs.set(used)
         }
-        
+
         fn set_day(&mut self, used: usize) -> bool {
             self.day.set(used)
         }
@@ -357,16 +366,16 @@ pub mod api_rate_limit {
                 let now = Utc::now();
                 let (h, m, s) = (now.hour(), now.minute(), now.second());
 
-                // 整10秒时，如果是UTC 00:00:00，则同时重置秒级和日级的限速值(放在一起重置将只获取一次写锁)，否则只重置秒级
-                if s % 10 == 0 {
-                    if h == 0 && m == 0 && s == 0 {
+                // 整10秒时(延迟1秒)，如果是UTC 00:00:00，则同时重置秒级和日级的限速值(放在一起重置将只获取一次写锁)，否则只重置秒级
+                if s % 10 == 1 {
+                    if h == 0 && m == 0 && s == 1 {
                         self.reset_uid_limit().await;
                     } else {
                         self.reset_uid_secs_limit().await;
                     }
                 }
 
-                if s == 0 {
+                if s == 1 {
                     self.reset_ip_limit().await;
                 }
 

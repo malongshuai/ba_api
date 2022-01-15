@@ -7,7 +7,7 @@ use crate::{
 };
 use reqwest::{header, Url};
 use serde::Serialize;
-use std::{fmt::Debug, str::FromStr, sync::Arc};
+use std::{fmt::Debug, str::FromStr, sync::Arc, time::Duration};
 use tokio::time;
 use tracing::{error, warn};
 
@@ -80,6 +80,7 @@ impl FromStr for RestMethod {
     }
 }
 
+#[allow(dead_code)]
 /// 已建立好的Http连接客户端(reqwest::Client)
 #[derive(Debug, Clone)]
 pub struct RestConn {
@@ -88,7 +89,7 @@ pub struct RestConn {
     sec_key: String,
     base_url: Url,
     rate_limit: APIRateLimit,
-    pub exchange_info: Arc<Option<ExchangeInfo>>,
+    exchange_info: Arc<Option<ExchangeInfo>>,
 }
 
 #[allow(dead_code)]
@@ -278,11 +279,11 @@ impl RestConn {
         // resp = Self::check_rest_resp(resp).await?;
         // Ok(resp.text().await.unwrap())
 
-        // 尝试重连3次的方案
-        let mut retry = 4;
+        // 尝试重连5次的方案(每隔1秒重试一次)
+        let mut retry = 6;
         let mut resp = loop {
             retry -= 1;
-            if retry != 3 {
+            if retry != 5 {
                 warn!("Connect retry, remain retry times: {}", retry);
             }
 
@@ -298,10 +299,12 @@ impl RestConn {
                 Ok(r) => break Ok(r),
                 Err(e) => {
                     if e.is_connect() || e.is_timeout() {
-                        error!("connect failed {}", e.url().unwrap().to_string());
+                        error!("connect failed<{}>: {}", e.url().unwrap().to_string(), e);
                         if retry == 0 {
                             break Err(BiAnApiError::ConnectError(e.to_string()));
                         }
+                        // 每次重试，隔一秒
+                        time::sleep(Duration::from_secs(1)).await;
                         continue;
                     }
                     break Err(BiAnApiError::RequestError(e));
@@ -342,5 +345,12 @@ impl RestConn {
             }
         }
         None
+    }
+
+    /// 返回此刻剩余的限速权重,第一个是ip权重,第二个值为uid的秒级权重,第三个值为日级权重
+    pub async fn rate_limit_remains(&self) -> (usize, usize, usize) {
+        let ip_rate_limit = self.rate_limit.ip_permits_remain().await;
+        let (sec_uid, day_uid) = self.rate_limit.uid_permits_remain().await;
+        (ip_rate_limit, sec_uid, day_uid)
     }
 }

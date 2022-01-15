@@ -32,6 +32,10 @@ impl WsBalances {
     pub fn new() -> WsBalances {
         Self::default()
     }
+
+    pub fn merge_balance(&mut self, other: Balances) {
+        self.balances.merge_balance(other);
+    }
 }
 
 /// 余额更新信息(例如充值、提现、划转)

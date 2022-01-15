@@ -3,62 +3,97 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 
 /// K线间隔，包括：1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d, 3d, 1w, 1M
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum KLineInterval {
     /// 1分钟间隔
     #[serde(rename = "1m")]
-    Min1 = 60,
+    Min1 = 60_000,
     /// 3分钟间隔
     #[serde(rename = "3m")]
-    Min3 = 180,
+    Min3 = 180_000,
     /// 5分钟间隔
     #[serde(rename = "5m")]
-    Min5 = 300,
+    Min5 = 300_000,
     /// 15分钟间隔
     #[serde(rename = "15m")]
-    Min15 = 900,
+    Min15 = 900_000,
     /// 30分钟间隔
     #[serde(rename = "30m")]
-    Min30 = 1800,
+    Min30 = 1_800_000,
     /// 1小时间隔
     #[serde(rename = "1h")]
-    Hour1 = 3600,
+    Hour1 = 3_600_000,
     /// 2小时间隔
     #[serde(rename = "2h")]
-    Hour2 = 7200,
+    Hour2 = 7_200_000,
     /// 4小时间隔
     #[serde(rename = "4h")]
-    Hour4 = 14400,
+    Hour4 = 14_400_000,
     /// 6小时间隔
     #[serde(rename = "6h")]
-    Hour6 = 21600,
+    Hour6 = 21_600_000,
     /// 8小时间隔
     #[serde(rename = "8h")]
-    Hour8 = 28800,
+    Hour8 = 28_800_000,
     /// 12小时间隔
     #[serde(rename = "12h")]
-    Hour12 = 43200,
+    Hour12 = 43_200_000,
     /// 1天间隔
     #[serde(rename = "1d")]
-    Day1 = 86400,
+    Day1 = 86_400_000,
     /// 3天间隔
     #[serde(rename = "3d")]
-    Day3 = 3 * 86400,
+    Day3 = 3 * 86_400_000,
     /// 1周间隔
     #[serde(rename = "1w")]
-    Week1 = 7 * 86400,
-    /// 1月间隔
-    #[serde(rename = "1M")]
-    Mon1,
+    Week1 = 7 * 86_400_000,
+    // /// 1月间隔
+    // #[serde(rename = "1M")]
+    // Mon1,
 }
 
 impl KLineInterval {
     pub fn is_intv(interval: &str) -> bool {
         let valid_interval = [
             "1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "1d", "3d", "1w",
-            "1M",
         ];
         valid_interval.contains(&interval)
+    }
+    pub fn to_u64(&self) -> u64 {
+        match self {
+            KLineInterval::Min1 => 60_000,
+            KLineInterval::Min3 => 180_000,
+            KLineInterval::Min5 => 300_000,
+            KLineInterval::Min15 => 900_000,
+            KLineInterval::Min30 => 1_800_000,
+            KLineInterval::Hour1 => 3_600_000,
+            KLineInterval::Hour2 => 7_200_000,
+            KLineInterval::Hour4 => 14_400_000,
+            KLineInterval::Hour6 => 21_600_000,
+            KLineInterval::Hour8 => 28_800_000,
+            KLineInterval::Hour12 => 43_200_000,
+            KLineInterval::Day1 => 86_400_000,
+            KLineInterval::Day3 => 3 * 86_400_000,
+            KLineInterval::Week1 => 7 * 86_400_000,
+        }
+    }
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Min1 => "1m",
+            Self::Min3 => "3m",
+            Self::Min5 => "5m",
+            Self::Min15 => "15m",
+            Self::Min30 => "30m",
+            Self::Hour1 => "1h",
+            Self::Hour2 => "2h",
+            Self::Hour4 => "4h",
+            Self::Hour6 => "6h",
+            Self::Hour8 => "8h",
+            Self::Hour12 => "12h",
+            Self::Day1 => "1d",
+            Self::Day3 => "3d",
+            Self::Week1 => "1w",
+        }
     }
 }
 
@@ -84,7 +119,6 @@ impl fmt::Display for KLineInterval {
             Self::Day1 => write!(f, "1d"),
             Self::Day3 => write!(f, "3d"),
             Self::Week1 => write!(f, "1w"),
-            Self::Mon1 => write!(f, "1M"),
         }
     }
 }
@@ -110,7 +144,6 @@ impl From<&str> for KLineInterval {
             "1d" => Self::Day1,
             "3d" => Self::Day3,
             "1w" => Self::Week1,
-            "1M" => Self::Mon1,
             _ => panic!("unsupported kline interval"),
         }
     }
@@ -163,8 +196,5 @@ mod kline_interval_test {
 
         s = KLineInterval::Week1.to_string();
         assert_eq!(s, "1w");
-
-        s = KLineInterval::Mon1.to_string();
-        assert_eq!(s, "1M");
     }
 }

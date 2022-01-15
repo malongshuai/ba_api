@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::fmt::Display;
+use std::{fmt::Display, io};
 use thiserror::Error;
 use tokio_tungstenite::tungstenite;
 
@@ -46,6 +46,10 @@ pub enum BiAnApiError {
     #[error("too many subscribes {0}")]
     TooManySubscribes(usize),
 
+    /// io错误
+    #[error(transparent)]
+    Io(#[from] io::Error),
+
     #[error("unknown error: {0}")]
     Unknown(String),
 }
@@ -72,4 +76,3 @@ impl Display for MethodError {
         )
     }
 }
-
