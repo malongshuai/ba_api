@@ -7,7 +7,7 @@ pub trait KLineExt {
     fn rate(&self) -> f64;
 
     /// 根据多根K线合并成一根K线，K线类型由第一根K线决定，K线是否完成，由最后一根K线决定
-    fn merge_from_ks(ks: Vec<&KLine>) -> KLine;
+    fn merge_from_ks(ks: Vec<&KLine>, dest_kl_type: KLineInterval) -> KLine;
 
     /// 从给定的字符串组成K线  
     /// 
@@ -27,13 +27,14 @@ impl KLineExt for KLine {
         self.open.percent(self.close)
     }
 
-    /// 根据多根K线合并成一根K线，K线类型由第一根K线决定，K线是否完成，由最后一根K线决定
-    fn merge_from_ks(ks: Vec<&KLine>) -> KLine {
+    /// 根据多根K线合并成一根K线，K线类型由参数dest_kl_type决定，K线是否完成，由最后一根K线决定
+    fn merge_from_ks(ks: Vec<&KLine>, dest_kl_type: KLineInterval) -> KLine {
         let mut merged_kl = ks[0].clone();
         let last_kl = &ks[ks.len() - 1];
         merged_kl.close_epoch = last_kl.close_epoch;
         merged_kl.close = last_kl.close;
         merged_kl.finish = last_kl.finish;
+        merged_kl.interval = dest_kl_type;
 
         for k in &ks[1..] {
             if k.high > merged_kl.high {

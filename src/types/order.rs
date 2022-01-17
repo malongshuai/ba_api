@@ -461,7 +461,7 @@ pub enum CancelOpenOrdersInfo {
     CancelOrderInfo(CancelOrderInfo),
 }
 
-/// 订单信息
+/// 订单信息(来自Rest API接口返回)
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OrderInfo {

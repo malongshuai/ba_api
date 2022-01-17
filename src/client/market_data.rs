@@ -79,9 +79,7 @@ impl RestConn {
         }
 
         let res = self.rest_req("get", path, params, Some(10)).await?;
-        if c_res.is_ok() {
-            if fs::write(&exchange_info_file, res.as_bytes()).await.is_ok() {}
-        }
+        if c_res.is_ok() && fs::write(&exchange_info_file, res.as_bytes()).await.is_ok() {}
 
         let exchange_info = serde_json::from_str::<ExchangeInfo>(&res)?;
         Ok(exchange_info)
