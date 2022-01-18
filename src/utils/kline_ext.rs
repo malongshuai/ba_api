@@ -10,13 +10,13 @@ pub trait KLineExt {
     fn merge_from_ks(ks: Vec<&KLine>, dest_kl_type: KLineInterval) -> KLine;
 
     /// 从给定的字符串组成K线  
-    /// 
+    ///
     /// 字段顺序:  
-    /// 
+    ///
     /// symbol,intv_type,epoch,close_epoch,finish,open,high,low,close,amount,vol,count
-    /// 
+    ///
     /// 例如：  
-    /// 
+    ///
     /// 1INCHUSDT,1m,1642039980000,1642040039999,true,2.446,2.458,2.444,2.453,58423.5,143086.3826,621
     fn from_str(kline_str: &str) -> Option<KLine>;
 }
@@ -37,12 +37,8 @@ impl KLineExt for KLine {
         merged_kl.interval = dest_kl_type;
 
         for k in &ks[1..] {
-            if k.high > merged_kl.high {
-                merged_kl.high = k.high
-            }
-            if k.low < merged_kl.low {
-                merged_kl.low = k.low
-            }
+            merged_kl.high = k.high.max(merged_kl.high);
+            merged_kl.low = k.low.min(merged_kl.low);
             merged_kl.count += k.count;
             merged_kl.vol += k.vol;
             merged_kl.amount += k.amount;

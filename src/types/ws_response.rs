@@ -20,7 +20,7 @@ where
     Ok(WrapBalance::deserialize(deserializer)?.balances)
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct WsBalances {
     #[serde(rename(deserialize = "u"))]
     pub event_time: u64,

@@ -47,15 +47,15 @@ impl Display for KLine {
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 enum WrapKLine {
-    RestKLine(RestKLine),
-    WebSocketKLine(WebSocketKLine),
-    RawKLine(RawKLine),
+    Rest(RestKLine),
+    WebSocket(WebSocketKLine),
+    Raw(RawKLine),
 }
 
 impl From<WrapKLine> for KLine {
     fn from(wk: WrapKLine) -> Self {
         match wk {
-            WrapKLine::RestKLine(data) => Self {
+            WrapKLine::Rest(data) => Self {
                 symbol: String::new(),
                 epoch: data.epoch,
                 close_epoch: data.close_epoch,
@@ -69,7 +69,7 @@ impl From<WrapKLine> for KLine {
                 finish: true,
                 interval: KLineInterval::Min1,
             },
-            WrapKLine::WebSocketKLine(data) => Self {
+            WrapKLine::WebSocket(data) => Self {
                 symbol: data.kline.symbol,
                 epoch: data.kline.epoch,
                 close_epoch: data.kline.close_epoch,
@@ -83,7 +83,7 @@ impl From<WrapKLine> for KLine {
                 finish: data.kline.finish,
                 interval: data.kline.interval,
             },
-            WrapKLine::RawKLine(data) => Self {
+            WrapKLine::Raw(data) => Self {
                 symbol: data.symbol,
                 epoch: data.epoch,
                 close_epoch: data.close_epoch,
@@ -267,24 +267,24 @@ mod kline_test {
 
     #[test]
     fn raw_kline() {
-        let str = r##"
-            {
-              "symbol": "BTCUSDT",
-              "interval": "1m",
-              "epoch":1641909600000,
-              "close_epoch":1641909659999,
-              "finish":true,
-              "open":41700.74,
-              "high":41700.74,
-              "low":41646.69,
-              "close":41665.83,
-              "amount":9.03677,
-              "vol":376549.1409579,
-              "count":599
-            }
-      "##;
+      //   let str = r##"
+      //       {
+      //         "symbol": "BTCUSDT",
+      //         "interval": "1m",
+      //         "epoch":1641909600000,
+      //         "close_epoch":1641909659999,
+      //         "finish":true,
+      //         "open":41700.74,
+      //         "high":41700.74,
+      //         "low":41646.69,
+      //         "close":41665.83,
+      //         "amount":9.03677,
+      //         "vol":376549.1409579,
+      //         "count":599
+      //       }
+      // "##;
 
-        let kline = serde_json::from_str::<KLine>(str);
+        // let kline = serde_json::from_str::<KLine>(str);
         // println!("{:?}", kline);
         // let kl = serde_json::to_string(&kline.unwrap()).unwrap();
         // println!("{:?}", kl);
