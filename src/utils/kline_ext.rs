@@ -6,6 +6,15 @@ pub trait KLineExt {
     /// (close - open) / open
     fn rate(&self) -> f64;
 
+    /// (high - low) / low
+    fn rate_lh(&self) -> f64;
+
+    /// (low - high) / high
+    fn rate_hl(&self) -> f64;
+
+    /// (low - open) / open
+    fn rate_ol(&self) -> f64;
+
     /// 根据多根K线合并成一根K线，K线类型由第一根K线决定，K线是否完成，由最后一根K线决定
     fn merge_from_ks(ks: Vec<&KLine>, dest_kl_type: KLineInterval) -> KLine;
 
@@ -25,6 +34,18 @@ impl KLineExt for KLine {
     /// (close - open) / open
     fn rate(&self) -> f64 {
         self.open.percent(self.close)
+    }
+
+    fn rate_lh(&self) -> f64 {
+        (self.high - self.low) / self.low
+    }
+
+    fn rate_hl(&self) -> f64 {
+        (self.low - self.high) / self.high
+    }
+
+    fn rate_ol(&self) -> f64 {
+        (self.low - self.open) / self.open
     }
 
     /// 根据多根K线合并成一根K线，K线类型由参数dest_kl_type决定，K线是否完成，由最后一根K线决定

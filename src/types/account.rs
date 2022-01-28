@@ -51,7 +51,10 @@ impl Balances {
     }
 
     pub fn get_balance(&self, coin: &str) -> RawBalance {
-        self.0.get(coin).cloned().unwrap_or_default()
+        self.0
+            .get(&coin.to_uppercase())
+            .cloned()
+            .unwrap_or_default()
     }
 
     /// 将另一个Balances合并到当前余额
