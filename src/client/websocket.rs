@@ -217,7 +217,7 @@ impl WsClient {
                 Some(msg) = self.ws.conn_stream.next() => {
                     match msg {
                         Ok(msg) => self.handle_msg(msg, data_sender.clone()).await?,
-                        Err(_) => warn!("ws closed: {}", self.names.join(","))
+                        Err(e) => warn!("ws closed: {}, {}", self.names.join(","), e)
                     }
                 },
                 Some(data) = self.rx.recv() => {
@@ -226,6 +226,8 @@ impl WsClient {
                 }
             }
         }
+
+        error!("break out ws_client");
         Ok(())
     }
 

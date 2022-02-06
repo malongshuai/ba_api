@@ -16,9 +16,9 @@ pub use types::symbol_info::*;
 pub use types::ticker::*;
 pub use types::ws_response::*;
 
-pub const STABLE_COINS: [&str; 20] = [
+pub const STABLE_COINS: [&str; 21] = [
     "AUD", "BIDR", "BRL", "EUR", "GBP", "RUB", "TRY", "TUSD", "USDC", "DAI", "IDRT", "UAH", "NGN",
-    "VAI", "USDP", "PAX", "SUSD", "BVND", "BUSD", "UST"
+    "VAI", "USDP", "PAX", "SUSD", "BVND", "BUSD", "UST", "PAXG"
 ];
 
 #[macro_use]

@@ -542,84 +542,57 @@ pub struct MyTrades {
 
 /// 订单更新信息(来自WebSocket的推送)
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(from = "WrapOrderUpdate")]
 pub struct OrderUpdate {
-    #[serde(rename(deserialize = "s"))]
     pub symbol: String,
-    #[serde(rename(deserialize = "c"))]
     pub client_order_id: String,
-    #[serde(rename(deserialize = "S"))]
     pub side: OrderSide,
-    #[serde(rename(deserialize = "o"))]
     pub order_type: OrderType,
-    #[serde(rename(deserialize = "f"))]
     pub time_in_force: TimeInForce,
     /// 订单原始数量
-    #[serde(rename(deserialize = "q"), deserialize_with = "string_to_f64")]
     pub qty: f64,
     /// 订单原始价格
-    #[serde(rename(deserialize = "p"), deserialize_with = "string_to_f64")]
     pub price: f64,
     /// 订单止盈、止损价格
-    #[serde(rename(deserialize = "P"), deserialize_with = "string_to_f64")]
     pub stop_price: f64,
     /// 冰山单数量
-    #[serde(rename(deserialize = "F"), deserialize_with = "string_to_f64")]
     pub iceberg_qty: f64,
     /// OCO订单ID
-    #[serde(rename(deserialize = "g"))]
     pub order_list_id: i64,
     /// 原始订单的client order id，撤单操作有自己的cid
-    #[serde(rename(deserialize = "C"))]
     pub orig_client_order_id: String,
     /// 触发推送该订单信息的操作
-    #[serde(rename(deserialize = "x"))]
     pub order_action: OrderAction,
     /// 订单的状态
-    #[serde(rename(deserialize = "X"))]
     pub order_status: OrderStatus,
     /// 订单被拒绝的原因
-    #[serde(rename(deserialize = "r"))]
     pub reason: String,
     /// 订单ID
-    #[serde(rename(deserialize = "i"))]
     pub order_id: u64,
     /// 订单末次成交量
-    #[serde(rename(deserialize = "l"), deserialize_with = "string_to_f64")]
     pub last_qty: f64,
     /// 订单已累计的成交量
-    #[serde(rename(deserialize = "z"), deserialize_with = "string_to_f64")]
     pub cummulative_qty: f64,
     /// 订单末次成交价
-    #[serde(rename(deserialize = "L"), deserialize_with = "string_to_f64")]
     pub last_price: f64,
     /// 手续费数量
-    #[serde(rename(deserialize = "n"), deserialize_with = "string_to_f64")]
     pub fee_qty: f64,
     /// 手续费资产名称，不产生手续费的订单状态(例如挂单和完全未成交的撤单)其值为null，可能为字符串
-    #[serde(rename(deserialize = "N"))]
     pub fee_quote: Option<String>,
     /// 该成交的成交时间
-    #[serde(rename(deserialize = "T"))]
     pub trade_time: u64,
     /// 该成交的成交ID(trade ID)
-    #[serde(rename(deserialize = "t"))]
     pub trade_id: i64,
     /// 订单是否在订单薄上
-    #[serde(rename(deserialize = "w"))]
     pub in_order_book: bool,
     /// 该成交是否是作为挂单成交(是否是maker方)
-    #[serde(rename(deserialize = "m"))]
     pub maker: bool,
     /// 订单创建时间
-    #[serde(rename(deserialize = "O"))]
     pub order_create_time: u64,
     /// 订单累计成交额
-    #[serde(rename(deserialize = "Z"), deserialize_with = "string_to_f64")]
     pub cummulative_vol: f64,
     /// 订单末次成交额
-    #[serde(rename(deserialize = "Y"), deserialize_with = "string_to_f64")]
     pub last_vol: f64,
-    #[serde(rename(deserialize = "Q"), deserialize_with = "string_to_f64")]
     /// 市价单时，报价资产的数量(例如市价买入BTCUSDT共100USDT时，该字段值为100.0)
     pub quote_order_qty: f64,
 }
@@ -633,20 +606,182 @@ impl OrderUpdate {
     }
 }
 
+impl From<WrapOrderUpdate> for OrderUpdate {
+    fn from(ou: WrapOrderUpdate) -> Self {
+        match ou {
+            WrapOrderUpdate::RawOrderUpdate(ou) => Self {
+                symbol: ou.symbol,
+                client_order_id: ou.client_order_id,
+                side: ou.side,
+                order_type: ou.order_type,
+                time_in_force: ou.time_in_force,
+                qty: ou.qty,
+                price: ou.price,
+                stop_price: ou.stop_price,
+                iceberg_qty: ou.iceberg_qty,
+                order_list_id: ou.order_list_id,
+                orig_client_order_id: ou.orig_client_order_id,
+                order_action: ou.order_action,
+                order_status: ou.order_status,
+                reason: ou.reason,
+                order_id: ou.order_id,
+                last_qty: ou.last_qty,
+                cummulative_qty: ou.cummulative_qty,
+                last_price: ou.last_price,
+                fee_qty: ou.fee_qty,
+                fee_quote: ou.fee_quote,
+                trade_time: ou.trade_time,
+                trade_id: ou.trade_id,
+                in_order_book: ou.in_order_book,
+                maker: ou.maker,
+                order_create_time: ou.order_create_time,
+                cummulative_vol: ou.cummulative_vol,
+                last_vol: ou.last_vol,
+                quote_order_qty: ou.quote_order_qty,
+            },
+            WrapOrderUpdate::OriOrderUpdate(ou) => Self {
+                symbol: ou.symbol,
+                client_order_id: ou.client_order_id,
+                side: ou.side,
+                order_type: ou.order_type,
+                time_in_force: ou.time_in_force,
+                qty: ou.qty,
+                price: ou.price,
+                stop_price: ou.stop_price,
+                iceberg_qty: ou.iceberg_qty,
+                order_list_id: ou.order_list_id,
+                orig_client_order_id: ou.orig_client_order_id,
+                order_action: ou.order_action,
+                order_status: ou.order_status,
+                reason: ou.reason,
+                order_id: ou.order_id,
+                last_qty: ou.last_qty,
+                cummulative_qty: ou.cummulative_qty,
+                last_price: ou.last_price,
+                fee_qty: ou.fee_qty,
+                fee_quote: ou.fee_quote,
+                trade_time: ou.trade_time,
+                trade_id: ou.trade_id,
+                in_order_book: ou.in_order_book,
+                maker: ou.maker,
+                order_create_time: ou.order_create_time,
+                cummulative_vol: ou.cummulative_vol,
+                last_vol: ou.last_vol,
+                quote_order_qty: ou.quote_order_qty,
+            },
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum WrapOrderUpdate {
+    RawOrderUpdate(WebSocketOrderUpdate),
+    OriOrderUpdate(RawOrderUpdate),
+}
+
+#[derive(Debug, Deserialize)]
+struct RawOrderUpdate {
+    symbol: String,
+    client_order_id: String,
+    side: OrderSide,
+    order_type: OrderType,
+    time_in_force: TimeInForce,
+    qty: f64,
+    price: f64,
+    stop_price: f64,
+    iceberg_qty: f64,
+    order_list_id: i64,
+    orig_client_order_id: String,
+    order_action: OrderAction,
+    order_status: OrderStatus,
+    reason: String,
+    order_id: u64,
+    last_qty: f64,
+    cummulative_qty: f64,
+    last_price: f64,
+    fee_qty: f64,
+    fee_quote: Option<String>,
+    trade_time: u64,
+    trade_id: i64,
+    in_order_book: bool,
+    maker: bool,
+    order_create_time: u64,
+    cummulative_vol: f64,
+    last_vol: f64,
+    quote_order_qty: f64,
+}
+
+#[derive(Debug, Deserialize)]
+struct WebSocketOrderUpdate {
+    #[serde(rename(deserialize = "s"))]
+    symbol: String,
+    #[serde(rename(deserialize = "c"))]
+    client_order_id: String,
+    #[serde(rename(deserialize = "S"))]
+    side: OrderSide,
+    #[serde(rename(deserialize = "o"))]
+    order_type: OrderType,
+    #[serde(rename(deserialize = "f"))]
+    time_in_force: TimeInForce,
+    #[serde(rename(deserialize = "q"), deserialize_with = "string_to_f64")]
+    qty: f64,
+    #[serde(rename(deserialize = "p"), deserialize_with = "string_to_f64")]
+    price: f64,
+    #[serde(rename(deserialize = "P"), deserialize_with = "string_to_f64")]
+    stop_price: f64,
+    #[serde(rename(deserialize = "F"), deserialize_with = "string_to_f64")]
+    iceberg_qty: f64,
+    #[serde(rename(deserialize = "g"))]
+    order_list_id: i64,
+    #[serde(rename(deserialize = "C"))]
+    orig_client_order_id: String,
+    #[serde(rename(deserialize = "x"))]
+    order_action: OrderAction,
+    #[serde(rename(deserialize = "X"))]
+    order_status: OrderStatus,
+    #[serde(rename(deserialize = "r"))]
+    reason: String,
+    #[serde(rename(deserialize = "i"))]
+    order_id: u64,
+    #[serde(rename(deserialize = "l"), deserialize_with = "string_to_f64")]
+    last_qty: f64,
+    #[serde(rename(deserialize = "z"), deserialize_with = "string_to_f64")]
+    cummulative_qty: f64,
+    #[serde(rename(deserialize = "L"), deserialize_with = "string_to_f64")]
+    last_price: f64,
+    #[serde(rename(deserialize = "n"), deserialize_with = "string_to_f64")]
+    fee_qty: f64,
+    #[serde(rename(deserialize = "N"))]
+    fee_quote: Option<String>,
+    #[serde(rename(deserialize = "T"))]
+    trade_time: u64,
+    #[serde(rename(deserialize = "t"))]
+    trade_id: i64,
+    #[serde(rename(deserialize = "w"))]
+    in_order_book: bool,
+    #[serde(rename(deserialize = "m"))]
+    maker: bool,
+    #[serde(rename(deserialize = "O"))]
+    order_create_time: u64,
+    #[serde(rename(deserialize = "Z"), deserialize_with = "string_to_f64")]
+    cummulative_vol: f64,
+    #[serde(rename(deserialize = "Y"), deserialize_with = "string_to_f64")]
+    last_vol: f64,
+    #[serde(rename(deserialize = "Q"), deserialize_with = "string_to_f64")]
+    quote_order_qty: f64,
+}
+
 #[cfg(test)]
 mod test {
-    use crate::types::order::Trade;
+    use crate::{types::order::Trade, OrderUpdate};
 
     #[test]
     fn test_rest_trade() {
         let rest_trade = r##"
             {
-              "id": 28457,
-              "price": "4.00000100",
-              "qty": "12.00000000",
-              "time": 1499865549590,
-              "isBuyerMaker": true,
-              "isBestMatch": true
+              "id": 28457, "price": "4.00000100", "qty": "12.00000000",
+              "time": 1499865549590, "isBuyerMaker": true, "isBestMatch": true
             }
         "##;
         let x = serde_json::from_str::<Trade>(rest_trade);
@@ -658,21 +793,42 @@ mod test {
     fn test_ws_trade() {
         let websocket_trade = r##"
             {
-              "e": "trade",  
-              "E": 123456789,
-              "s": "BNBBTC", 
-              "t": 12345,    
-              "p": "0.001",  
-              "q": "100",    
-              "b": 88,       
-              "a": 50,       
-              "T": 123456785,
-              "m": true,     
-              "M": true      
+              "e": "trade", "E": 123456789, "s": "BNBBTC", "t": 12345, "p": "0.001",  
+              "q": "100", "b": 88, "a": 50, "T": 123456785, "m": true, "M": true
             }
         "##;
         let x = serde_json::from_str::<Trade>(websocket_trade);
         // println!("{:?}", x);
         assert!(x.is_ok());
+    }
+
+    #[test]
+    fn test_order_update() {
+        let str1 = r##"
+            {
+              "e": "executionReport", "E": 1499405658658, "s": "ETHBTC", "c": "mUvoqJxFIILMdfAW5iGSOW",
+              "S": "BUY", "o": "LIMIT", "f": "GTC", "q": "1.00000000", "p": "0.10264410", "P": "0.00000000",
+              "F": "0.00000000", "g": -1, "C": "", "x": "NEW",  "X": "NEW", "r": "NONE", "i": 4293153, "l": "0.00000000",
+              "z": "0.00000000", "L": "0.00000000", "n": "0", "N": null, "T": 1499405658657, "t": -1, "I": 8641984, 
+              "w": true, "m": false, "M": false, "O": 1499405658657, "Z": "0.00000000", "Y": "0.00000000", 
+              "Q": "0.00000000"
+            }
+        "##;
+
+        let str2 = r##"
+            {
+              "symbol":"FORTHUSDT","client_order_id":"ACVNqi8ghgMEO6bshmKYCI","side":"BUY","order_type":"LIMIT",
+              "time_in_force":"GTC","qty":1.27,"price":8.61,"stop_price":0.0,"iceberg_qty":0.0,"order_list_id":-1,
+              "orig_client_order_id":"","order_action":"NEW","order_status":"NEW","reason":"NONE","order_id":67075247,
+              "last_qty":0.0,"cummulative_qty":0.0,"last_price":0.0,"fee_qty":0.0,"fee_quote":null,
+              "trade_time":1643940015510, "trade_id":-1,"in_order_book":true,"maker":false,
+              "order_create_time":1643940015510,"cummulative_vol":0.0, "last_vol":0.0,"quote_order_qty":0.0
+            }
+        "##;
+
+        let res1 = serde_json::from_str::<OrderUpdate>(str1);
+        let res2 = serde_json::from_str::<OrderUpdate>(str2);
+        println!("{:?}", res1);
+        println!("{:?}", res2);
     }
 }

@@ -42,7 +42,7 @@ impl RawBalance {
 /// 账户余额信息
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct Balances(
-    #[serde(deserialize_with = "vec_balance_to_map")] pub HashMap<String, RawBalance>,
+    #[serde(deserialize_with = "balances_de_to_map")] pub HashMap<String, RawBalance>,
 );
 
 impl Balances {
@@ -65,23 +65,33 @@ impl Balances {
     }
 }
 
-fn vec_balance_to_map<'de, D>(deserializer: D) -> Result<HashMap<String, RawBalance>, D::Error>
+fn balances_de_to_map<'de, D>(deserializer: D) -> Result<HashMap<String, RawBalance>, D::Error>
 where
     D: Deserializer<'de>,
 {
-    let mut hash: HashMap<String, RawBalance> = HashMap::new();
-    let x: Vec<Balance> = Vec::deserialize(deserializer)?;
-    for i in &x {
-        hash.insert(
-            i.asset.to_string(),
-            RawBalance {
-                free: i.free,
-                locked: i.locked,
-            },
-        );
+    #[derive(Debug, Deserialize)]
+    #[serde(untagged)]
+    enum M {
+        Vec(Vec<Balance>),
+        HashMap(HashMap<String, RawBalance>),
     }
 
-    Ok(hash)
+    match M::deserialize(deserializer)? {
+        M::HashMap(bs) => Ok(bs),
+        M::Vec(bs) => {
+            let mut hash = HashMap::new();
+            for i in &bs {
+                hash.insert(
+                    i.asset.to_string(),
+                    RawBalance {
+                        free: i.free,
+                        locked: i.locked,
+                    },
+                );
+            }
+            Ok(hash)
+        }
+    }
 }
 
 /// 账户余额信息
