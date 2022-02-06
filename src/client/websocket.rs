@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use futures_util::{SinkExt, StreamExt};
 use tokio::{
@@ -72,10 +72,16 @@ impl WS {
     }
 
     /// 创建一个新的WebSocketStream，并将其替换该ws连接内部已有的WebSocketStream  
-    pub async fn replace_inner_stream(&mut self) -> BiAnResult<()> {
-        let (ws_stream, _response) = connect_async(&self.url).await?;
-        self.conn_stream = ws_stream;
-        Ok(())
+    pub async fn replace_inner_stream(&mut self) {
+        let dur = Duration::from_millis(500);
+        loop {
+            if let Ok((ws_stream, _response)) = connect_async(&self.url).await {
+                self.conn_stream = ws_stream;
+                break;
+            }
+            warn!("retry to build websocket stream");
+            tokio::time::sleep(dur).await;
+        }
     }
 
     /// 关闭ws conn_stream
@@ -89,21 +95,19 @@ impl WS {
     }
 
     /// 处理ws接收到的信息，并且在接收到ws关闭信息的时候替换重建ws
-    async fn handle_msg(
-        &mut self,
-        msg: Message,
-        data_sender: mpsc::Sender<String>,
-    ) -> BiAnResult<()> {
+    async fn handle_msg(&mut self, msg: Message, data_sender: mpsc::Sender<String>) {
         match msg {
             Message::Text(data) => {
                 if data_sender.send(data).await.is_err() {
-                    debug!("Data Receiver already closed");
+                    error!("Data Receiver already closed");
                 }
             }
             Message::Ping(_) => {
                 debug!("received Ping Frame");
                 let pong = Message::Pong(vec![]);
-                self.conn_stream.send(pong).await.unwrap();
+                if let Err(e) = self.conn_stream.send(pong).await {
+                    error!("websocket closed: {}", e);
+                }
             }
             Message::Close(Some(data)) => {
                 debug!(
@@ -111,11 +115,10 @@ impl WS {
                     data.reason,
                     self.names.join(",")
                 );
-                self.replace_inner_stream().await?;
+                self.replace_inner_stream().await;
             }
             _ => (),
         }
-        Ok(())
     }
 }
 
@@ -215,13 +218,11 @@ impl WsClient {
                 if let Some(msg) = ws.conn_stream.next().await {
                     match msg {
                         Ok(msg) => {
-                            if let Err(e) = ws.handle_msg(msg, data_sender.clone()).await {
-                                error!("handle msg error: {}", e);
-                                break;
-                            }
+                            ws.handle_msg(msg, data_sender.clone()).await;
                         }
                         Err(e) => {
                             warn!("ws closed: {}, {}", ws.names.join(","), e);
+                            ws.replace_inner_stream().await;
                         }
                     }
                 }
@@ -244,7 +245,7 @@ impl WsClient {
         });
         tokio::select! {
           _ = &mut msg_handle_task => {
-            error!("ws msg handle task terminated and can't rebuild ws stream");
+            error!("ws msg handle task terminated");
           },
           _ = &mut close_handle_task => {
             error!("ws close handle task terminated");
