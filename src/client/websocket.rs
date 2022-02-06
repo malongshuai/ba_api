@@ -1,7 +1,10 @@
-use core::panic;
+use std::sync::Arc;
 
 use futures_util::{SinkExt, StreamExt};
-use tokio::{net::TcpStream, sync::mpsc};
+use tokio::{
+    net::TcpStream,
+    sync::{mpsc, RwLock},
+};
 use tokio_tungstenite::{
     connect_async,
     tungstenite::{
@@ -24,8 +27,11 @@ type WsStream = WebSocketStream<MaybeTlsStream<TcpStream>>;
 pub struct WS {
     /// WebSocketStream
     pub conn_stream: WsStream,
+    /// 该ws订阅的频道
     pub names: Vec<String>,
+    /// 该ws连接订阅的频道名称
     pub channel: String,
+    /// 该ws的URL
     pub url: String,
 }
 
@@ -81,6 +87,36 @@ impl WS {
         self.conn_stream.close(Some(close_frame)).await?;
         Ok(())
     }
+
+    /// 处理ws接收到的信息，并且在接收到ws关闭信息的时候替换重建ws
+    async fn handle_msg(
+        &mut self,
+        msg: Message,
+        data_sender: mpsc::Sender<String>,
+    ) -> BiAnResult<()> {
+        match msg {
+            Message::Text(data) => {
+                if data_sender.send(data).await.is_err() {
+                    debug!("Data Receiver already closed");
+                }
+            }
+            Message::Ping(_) => {
+                debug!("received Ping Frame");
+                let pong = Message::Pong(vec![]);
+                self.conn_stream.send(pong).await.unwrap();
+            }
+            Message::Close(Some(data)) => {
+                debug!(
+                    "close reason: <{}>, <{}>",
+                    data.reason,
+                    self.names.join(",")
+                );
+                self.replace_inner_stream().await?;
+            }
+            _ => (),
+        }
+        Ok(())
+    }
 }
 
 /// ws连接，只支持订阅组合Stream(参考<https://binance-docs.github.io/apidocs/spot/cn/#websocket>)
@@ -105,16 +141,10 @@ impl WS {
 ///
 /// wsc.ws_client(data_tx).await.unwrap();
 /// ```
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct WsClient {
-    pub ws: WS,
-    rx: mpsc::Receiver<bool>,
-    /// 该ws连接订阅的频道名称
-    pub channel: String,
-    /// 该ws订阅的频道
-    pub names: Vec<String>,
-    /// 该ws的URL
-    pub url: String,
+    pub ws: Arc<RwLock<WS>>,
+    rx: Arc<RwLock<mpsc::Receiver<bool>>>,
 }
 
 impl WsClient {
@@ -125,15 +155,10 @@ impl WsClient {
         close_receiver: mpsc::Receiver<bool>,
     ) -> BiAnResult<Self> {
         let ws = WS::new(channel, names).await?;
-        let names = ws.names.clone();
-        let url = ws.url.clone();
 
         Ok(Self {
-            ws,
-            rx: close_receiver,
-            channel: channel.to_string(),
-            names,
-            url,
+            ws: Arc::new(RwLock::new(ws)),
+            rx: Arc::new(RwLock::new(close_receiver)),
         })
     }
 
@@ -151,36 +176,6 @@ impl WsClient {
         if close_sender.send(force).await.is_err() {
             error!("close receiver of close client already closed");
         }
-    }
-
-    async fn handle_msg(
-        &mut self,
-        msg: Message,
-        data_sender: mpsc::Sender<String>,
-    ) -> BiAnResult<()> {
-        match msg {
-            Message::Text(data) => {
-                // debug!("received Text Frame: {}", data);
-                if data_sender.send(data).await.is_err() {
-                    debug!("Data Receiver already closed");
-                }
-            }
-            Message::Ping(_) => {
-                debug!("received Ping Frame");
-                let pong = Message::Pong(vec![]);
-                self.ws.conn_stream.send(pong).await.unwrap();
-            }
-            Message::Close(Some(data)) => {
-                debug!(
-                    "close reason: <{}>, <{}>",
-                    data.reason,
-                    self.names.join(",")
-                );
-                self.ws.replace_inner_stream().await?;
-            }
-            _ => (),
-        }
-        Ok(())
     }
 
     /// 建立一个断连后会自动重连的ws客户端(会阻塞当前异步任务)  
@@ -208,26 +203,56 @@ impl WsClient {
     ///
     /// wsc.ws_client(data_tx).await.unwrap();
     /// ```
-    pub async fn ws_client(&mut self, data_sender: mpsc::Sender<String>) -> BiAnResult<()> {
-        loop {
-            if data_sender.is_closed() {
-                break;
-            }
-            tokio::select! {
-                Some(msg) = self.ws.conn_stream.next() => {
+    pub async fn ws_client(&self, data_sender: mpsc::Sender<String>) -> BiAnResult<()> {
+        let ws_self = self.clone();
+        //^ 循环不断地接收ws的信息，当无法重建ws时才返回
+        let mut msg_handle_task = tokio::spawn(async move {
+            loop {
+                if data_sender.is_closed() {
+                    break;
+                }
+                let mut ws = ws_self.ws.write().await;
+                if let Some(msg) = ws.conn_stream.next().await {
                     match msg {
-                        Ok(msg) => self.handle_msg(msg, data_sender.clone()).await?,
-                        Err(e) => warn!("ws closed: {}, {}", self.names.join(","), e)
+                        Ok(msg) => {
+                            if let Err(e) = ws.handle_msg(msg, data_sender.clone()).await {
+                                error!("handle msg error: {}", e);
+                                break;
+                            }
+                        }
+                        Err(e) => {
+                            warn!("ws closed: {}, {}", ws.names.join(","), e);
+                        }
                     }
-                },
-                Some(data) = self.rx.recv() => {
-                    self.ws.close_stream().await?;
-                    if data { break; }
                 }
             }
+        });
+        let ws_self = self.clone();
+        let mut close_handle_task = tokio::spawn(async move {
+            loop {
+                if let Some(data) = ws_self.rx.write().await.recv().await {
+                    let mut ws = ws_self.ws.write().await;
+                    if let Err(e) = ws.close_stream().await {
+                        error!("close stream error: {}", e);
+                        break;
+                    }
+                    if data {
+                        break;
+                    }
+                }
+            }
+        });
+        tokio::select! {
+          _ = &mut msg_handle_task => {
+            error!("ws msg handle task terminated and can't rebuild ws stream");
+          },
+          _ = &mut close_handle_task => {
+            error!("ws close handle task terminated");
+          },
         }
-
-        error!("break out ws_client");
+        error!("ws_client break out");
+        msg_handle_task.abort();
+        close_handle_task.abort();
         Ok(())
     }
 
@@ -245,7 +270,7 @@ impl WsClient {
         data_sender: mpsc::Sender<String>,
         close_receiver: mpsc::Receiver<bool>,
     ) -> BiAnResult<()> {
-        let mut wsc = Self::new(channel, names, close_receiver).await?;
+        let wsc = Self::new(channel, names, close_receiver).await?;
         wsc.ws_client(data_sender).await?;
         Ok(())
     }
