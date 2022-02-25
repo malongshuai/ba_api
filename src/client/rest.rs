@@ -131,9 +131,14 @@ impl RestConn {
             exchange_info: Arc::new(None),
         };
 
-        if let Ok(exchange_info) = rest_conn.exchange_info(None).await {
-            rest_conn.exchange_info = Arc::new(Some(exchange_info));
-        };
+        match rest_conn.exchange_info(None).await {
+            Ok(exchange_info) => rest_conn.exchange_info = Arc::new(Some(exchange_info)),
+            Err(e) => error!("get exchange_info failed: {}", e),
+        }
+
+        // if let Ok(exchange_info) = rest_conn.exchange_info(None).await {
+        //     rest_conn.exchange_info = Arc::new(Some(exchange_info));
+        // };
 
         rest_conn
     }

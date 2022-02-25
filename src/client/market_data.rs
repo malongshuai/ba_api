@@ -82,6 +82,7 @@ impl RestConn {
         if c_res.is_ok() && fs::write(&exchange_info_file, res.as_bytes()).await.is_ok() {}
 
         let exchange_info = serde_json::from_str::<ExchangeInfo>(&res)?;
+        
         Ok(exchange_info)
     }
 
