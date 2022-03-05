@@ -704,3 +704,36 @@ impl Param for PListenKey {
         CheckType::UserStream
     }
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PDustBtc;
+impl Param for PDustBtc {
+    fn check_type(&self) -> CheckType {
+        CheckType::UserData
+    }
+    fn rate_limit(&self) -> PRateLimit {
+        PRateLimit::ApiUid
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PDust {
+    asset: String,
+}
+impl PDust {
+    pub fn new(asset: &str) -> Self {
+        Self {
+            asset: asset.to_uppercase(),
+        }
+    }
+}
+impl Param for PDust {
+    fn check_type(&self) -> CheckType {
+        CheckType::UserData
+    }
+    fn rate_limit(&self) -> PRateLimit {
+        PRateLimit::ApiUid
+    }
+}

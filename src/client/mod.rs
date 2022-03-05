@@ -18,6 +18,9 @@ pub mod market_data;
 /// [现货交易接口](rest/struct.RestConn.html#impl-2)，币安API Doc现货账户和现货交易接口下的方法都在此
 pub mod spot_account_trade;
 
+/// 钱包相关接口
+pub mod wallet;
+
 pub use rest::*;
 pub use websocket::*;
 
