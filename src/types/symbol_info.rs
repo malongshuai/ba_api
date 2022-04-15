@@ -85,6 +85,14 @@ pub enum SymbolFilter {
         #[serde(deserialize_with = "string_to_f64")]
         max_position: f64,
     },
+
+    #[serde(rename = "TRAILING_DELTA", rename_all = "camelCase")]
+    TrailingDelta {
+        min_trailing_above_delta: u64,
+        max_trailing_above_delta: u64,
+        min_trailing_below_delta: u64,
+        max_trailing_below_delta: u64,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
