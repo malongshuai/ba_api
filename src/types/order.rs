@@ -556,7 +556,7 @@ pub struct OrderUpdate {
     /// 订单止盈、止损价格
     pub stop_price: f64,
     /// 追踪止损(Trailing Delta) 只有在追踪止损订单中才会推送.
-    pub delta: u64,
+    pub delta: Option<u64>,
     /// 冰山单数量
     pub iceberg_qty: f64,
     /// OCO订单ID
@@ -694,7 +694,7 @@ struct RawOrderUpdate {
     qty: f64,
     price: f64,
     stop_price: f64,
-    delta: u64,
+    delta: Option<u64>,
     iceberg_qty: f64,
     order_list_id: i64,
     orig_client_order_id: String,
@@ -736,7 +736,7 @@ struct WebSocketOrderUpdate {
     #[serde(rename(deserialize = "P"), deserialize_with = "string_to_f64")]
     stop_price: f64,
     #[serde(rename(deserialize = "d"))]
-    delta: u64,
+    delta: Option<u64>,
     #[serde(rename(deserialize = "F"), deserialize_with = "string_to_f64")]
     iceberg_qty: f64,
     #[serde(rename(deserialize = "g"))]
