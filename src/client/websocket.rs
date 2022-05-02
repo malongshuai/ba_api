@@ -145,24 +145,28 @@ impl WS {
 /// wsc.ws_client(data_tx).await.unwrap();
 /// ```
 #[derive(Debug, Clone)]
+#[must_use = "`WsClient` must be use"]
 pub struct WsClient {
     pub ws: Arc<RwLock<WS>>,
-    rx: Arc<RwLock<mpsc::Receiver<bool>>>,
+    close_sender: Arc<RwLock<mpsc::Sender<bool>>>,
+    close_receiver: Arc<RwLock<mpsc::Receiver<bool>>>,
 }
 
 impl WsClient {
     /// 新建到币安的ws连接客户端，需传入一个mpsc::Receiver来接收连接关闭的通知
-    pub async fn new(
-        channel: &str,
-        names: Vec<String>,
-        close_receiver: mpsc::Receiver<bool>,
-    ) -> BiAnResult<Self> {
+    pub async fn new(channel: &str, names: Vec<String>) -> BiAnResult<Self> {
         let ws = WS::new(channel, names).await?;
-
+        let (close_sender, close_receiver) = mpsc::channel::<bool>(1);
         Ok(Self {
             ws: Arc::new(RwLock::new(ws)),
-            rx: Arc::new(RwLock::new(close_receiver)),
+            close_receiver: Arc::new(RwLock::new(close_receiver)),
+            close_sender: Arc::new(RwLock::new(close_sender)),
         })
+    }
+
+    /// 获取
+    pub async fn close_sender(&self) -> mpsc::Sender<bool> {
+        self.close_sender.read().await.clone()
     }
 
     /// 需结合ws_client使用，强制或不强制关闭ws client
@@ -186,9 +190,8 @@ impl WsClient {
     /// 如果需要强制关闭ws_client，使用close_client发送true参数，如果需要手动断开但自动重连(相当于重建连接)，使用close_client发送false参数  
     /// ```rust
     /// let (data_tx, mut data_rx) = mpsc::channel::<String>(1000);
-    ///
-    /// let (close_sender, close_receiver) = mpsc::channel::<bool>(1);
-    /// let mut wsc = WsClient::new("kline_1m", vec!["btcusdt", "ethusdt"], close_receiver).await.unwrap();
+    /// let mut wsc = WsClient::new("kline_1m", vec!["btcusdt", "ethusdt"]).await.unwrap();
+    /// let close_sender = wsc.close_sender().await;
     ///
     /// // 接收数据
     /// tokio::spawn(async move {
@@ -204,9 +207,9 @@ impl WsClient {
     ///     debug!("send close");
     /// });
     ///
-    /// wsc.ws_client(data_tx).await.unwrap();
+    /// wsc.sub_channel(data_tx).await.unwrap();
     /// ```
-    pub async fn ws_client(&self, data_sender: mpsc::Sender<String>) -> BiAnResult<()> {
+    pub async fn sub_channel(&self, data_sender: mpsc::Sender<String>) -> BiAnResult<()> {
         let ws_self = self.clone();
         //^ 循环不断地接收ws的信息，当无法重建ws时才返回
         let mut msg_handle_task = tokio::spawn(async move {
@@ -231,242 +234,124 @@ impl WsClient {
         let ws_self = self.clone();
         let mut close_handle_task = tokio::spawn(async move {
             loop {
-                if let Some(data) = ws_self.rx.write().await.recv().await {
-                    let mut ws = ws_self.ws.write().await;
-                    if let Err(e) = ws.close_stream().await {
-                        error!("close stream error: {}", e);
-                        break;
+                match ws_self.close_receiver.write().await.recv().await {
+                    Some(data) => {
+                        let mut ws = ws_self.ws.write().await;
+                        if let Err(e) = ws.close_stream().await {
+                            error!("close stream error: {}", e);
+                            break;
+                        }
+                        if data {
+                            break;
+                        }
                     }
-                    if data {
-                        break;
-                    }
+                    None => warn!("ws close channel closed"),
                 }
             }
         });
-        tokio::select! {
-          _ = &mut msg_handle_task => {
-            error!("ws msg handle task terminated");
-          },
-          _ = &mut close_handle_task => {
-            error!("ws close handle task terminated");
-          },
+        if let Err(e) = tokio::try_join!(&mut msg_handle_task, &mut close_handle_task) {
+            msg_handle_task.abort();
+            close_handle_task.abort();
+            error!("ws_client break out: {}", e);
         }
-        error!("ws_client break out");
-        msg_handle_task.abort();
-        close_handle_task.abort();
-        Ok(())
-    }
-
-    /// 创建一个ws连接并进行订阅，将"阻塞"当前异步任务，连接断开将自动重连，如需关闭连接ws，通过close_client并使用close_receiver配对的Sender作为参数发送true来强制关闭连接
-    /// ```rust
-    /// // 收发数据的通道
-    /// let (data_tx, mut data_rx) = mpsc::channel::<String>(1000);
-    /// // 收发关闭连接通知的通道
-    /// let (close_tx, close_rx) = mpsc::channel::<bool>(1);
-    /// WsClient::sub_channel("kline_1m", vec!["btcusdt", "ethusdt"], data_tx, close_rx).await.unwrap();
-    /// ```
-    pub async fn sub_channel(
-        channel: &str,
-        names: Vec<String>,
-        data_sender: mpsc::Sender<String>,
-        close_receiver: mpsc::Receiver<bool>,
-    ) -> BiAnResult<()> {
-        let wsc = Self::new(channel, names, close_receiver).await?;
-        wsc.ws_client(data_sender).await?;
         Ok(())
     }
 
     /// 以ws_client的方式订阅"归集交易流"(将"阻塞"当前异步任务)  
     /// 归集交易 stream 推送交易信息，是对单一订单的集合  
     /// symbols参数忽略大小写  
-    /// ```rust
-    /// // 收发数据的通道
-    /// let (data_tx, mut data_rx) = mpsc::channel::<String>(1000);
-    /// // 收发关闭连接通知的通道
-    /// let (close_sender, close_receiver) = mpsc::channel::<bool>(1);
-    ///
-    /// WsClient::agg_trade(vec!["btcusdt", "ethusdt"], data_tx, close_receiver);
-    /// ```
-    pub async fn agg_trade(
-        symbols: Vec<String>,
-        data_sender: mpsc::Sender<String>,
-        close_receiver: mpsc::Receiver<bool>,
-    ) -> BiAnResult<()> {
+    pub async fn agg_trade(symbols: Vec<String>) -> BiAnResult<Self> {
         let symbols: Vec<String> = symbols.iter().map(|x| x.to_lowercase()).collect();
-        Ok(Self::sub_channel("aggTrade", symbols, data_sender, close_receiver).await?)
+        Self::new("aggTrade", symbols).await
     }
 
     /// 以ws_client的方式订阅"逐笔交易流"(将"阻塞"当前异步任务)  
     /// 逐笔交易推送每一笔成交的信息。成交，或者说交易的定义是仅有一个吃单者与一个挂单者相互交易  
     /// symbols参数忽略大小写  
-    pub async fn trade(
-        symbols: Vec<String>,
-        data_sender: mpsc::Sender<String>,
-        close_receiver: mpsc::Receiver<bool>,
-    ) -> BiAnResult<()> {
+    pub async fn trade(symbols: Vec<String>) -> BiAnResult<Self> {
         let symbols: Vec<String> = symbols.iter().map(|x| x.to_lowercase()).collect();
-        Ok(Self::sub_channel("trade", symbols, data_sender, close_receiver).await?)
+        Self::new("trade", symbols).await
     }
 
     /// 以ws_client的方式订阅"K线数据流"(将"阻塞"当前异步任务)  
     /// K线stream逐秒推送所请求的K线种类(最新一根K线)的更新  
     /// symbols参数忽略大小写  
-    /// ```rust
-    /// let (data_sender, mut data_receiver) = mpsc::channel::<String>(1000);
-    /// let (close_sender, close_receiver) = mpsc::channel::<bool>(1);
-    ///
-    /// tokio::spawn(async move {
-    ///     while let Some(x) = data_receiver.recv().await {
-    ///         println!("channel received: {}", x);
-    ///     }
-    /// });
-    ///
-    /// // 20秒后强制关闭ws连接
-    /// tokio::spawn(async move {
-    ///     tokio::time::sleep(Duration::from_secs(20)).await;
-    ///     WsClient::close_client(close_sender, true).await;
-    ///     debug!("send close");
-    /// });
-    ///
-    /// WsClient::kline(
-    ///     "1m",
-    ///     vec!["btcusdt", "ethusdt"],
-    ///     data_sender,
-    ///     close_receiver,
-    /// )
-    /// .await
-    /// .unwrap();
-    /// ```
-    pub async fn kline(
-        interval: &str,
-        symbols: Vec<String>,
-        data_sender: mpsc::Sender<String>,
-        close_receiver: mpsc::Receiver<bool>,
-    ) -> BiAnResult<()> {
+    pub async fn kline(interval: &str, symbols: Vec<String>) -> BiAnResult<Self> {
         if !KLineInterval::is_intv(interval) {
-            panic!(
-                "argument error: <{}> is not the valid kline interval",
-                interval
-            );
+            panic!("argument error: <{}> invalid kline interval", interval);
         }
         let symbols: Vec<String> = symbols.iter().map(|x| x.to_lowercase()).collect();
         let channel = format!("kline_{}", interval);
-        Ok(Self::sub_channel(&channel, symbols, data_sender, close_receiver).await?)
+        Self::new(&channel, symbols).await
     }
 
     /// 以ws_client的方式订阅"按symbol的精简Ticker"(将"阻塞"当前异步任务)  
     /// 按Symbol刷新的最近24小时精简ticker信息  
     /// symbols参数忽略大小写  
-    pub async fn mini_ticker(
-        symbols: Vec<String>,
-        data_sender: mpsc::Sender<String>,
-        close_receiver: mpsc::Receiver<bool>,
-    ) -> BiAnResult<()> {
+    pub async fn mini_ticker(symbols: Vec<String>) -> BiAnResult<Self> {
         let symbols: Vec<String> = symbols.iter().map(|x| x.to_lowercase()).collect();
-        Ok(Self::sub_channel("miniTicker", symbols, data_sender, close_receiver).await?)
+        Self::new("miniTicker", symbols).await
     }
 
     /// 以ws_client的方式订阅"全市场所有Symbol的精简Ticker"(将"阻塞"当前异步任务)  
     /// 推送所有交易对的最近24小时精简ticker信息.需注意，只有更新的ticker才会被推送
-    pub async fn all_mini_ticker(
-        data_sender: mpsc::Sender<String>,
-        close_receiver: mpsc::Receiver<bool>,
-    ) -> BiAnResult<()> {
-        Ok(Self::sub_channel(
-            "arr",
-            vec!["!miniTicker".to_string()],
-            data_sender,
-            close_receiver,
-        )
-        .await?)
+    pub async fn all_mini_ticker() -> BiAnResult<Self> {
+        Self::new("arr", vec!["!miniTicker".to_string()]).await
     }
 
     /// 以ws_client的方式订阅"按symbol的完整Ticker"(将"阻塞"当前异步任务)  
     /// 每秒推送单个交易对的过去24小时滚动窗口标签统计信息  
     /// symbols参数忽略大小写  
-    pub async fn ticker(
-        symbols: Vec<String>,
-        data_sender: mpsc::Sender<String>,
-        close_receiver: mpsc::Receiver<bool>,
-    ) -> BiAnResult<()> {
+    pub async fn ticker(symbols: Vec<String>) -> BiAnResult<Self> {
         let symbols: Vec<String> = symbols.iter().map(|x| x.to_lowercase()).collect();
-        Ok(Self::sub_channel("miniTicker", symbols, data_sender, close_receiver).await?)
+        Self::new("ticker", symbols).await
     }
 
     /// 以ws_client的方式订阅"全市场所有Symbol的完整Ticker"(将"阻塞"当前异步任务)  
     /// 推送所有交易对的最近24小时完整ticker信息.需注意，只有更新的ticker才会被推送
-    pub async fn all_ticker(
-        data_sender: mpsc::Sender<String>,
-        close_receiver: mpsc::Receiver<bool>,
-    ) -> BiAnResult<()> {
-        Ok(Self::sub_channel(
-            "arr",
-            vec!["!ticker".to_string()],
-            data_sender,
-            close_receiver,
-        )
-        .await?)
+    pub async fn all_ticker() -> BiAnResult<Self> {
+        Self::new("arr", vec!["!ticker".to_string()]).await
     }
 
     /// 以ws_client的方式订阅"按Symbol的最优挂单信息"(将"阻塞"当前异步任务)  
     /// 实时推送指定交易对最优挂单信息  
     /// symbols参数忽略大小写  
-    pub async fn bookticker(
-        symbols: Vec<String>,
-        data_sender: mpsc::Sender<String>,
-        close_receiver: mpsc::Receiver<bool>,
-    ) -> BiAnResult<()> {
+    pub async fn bookticker(symbols: Vec<String>) -> BiAnResult<Self> {
         let symbols: Vec<String> = symbols.iter().map(|x| x.to_lowercase()).collect();
-        Ok(Self::sub_channel("bookTicker", symbols, data_sender, close_receiver).await?)
+        Self::new("bookTicker", symbols).await
     }
 
     /// 以ws_client的方式订阅"全市场最优挂单信息"(将"阻塞"当前异步任务)  
     /// 实时推送所有交易对最优挂单信息
-    pub async fn all_bookticker(
-        data_sender: mpsc::Sender<String>,
-        close_receiver: mpsc::Receiver<bool>,
-    ) -> BiAnResult<()> {
+    pub async fn all_bookticker() -> BiAnResult<Self> {
         let names: Vec<String> = vec![];
-        Ok(Self::sub_channel("!bookTicker", names, data_sender, close_receiver).await?)
+        Self::new("!bookTicker", names).await
     }
 
     /// 以ws_client的方式订阅"有限档深度信息"(将"阻塞"当前异步任务)  
     /// 每100毫秒推送有限档深度信息。level表示几档买卖单信息, 可选5/10/20档  
     /// symbols参数忽略大小写  
-    pub async fn depth_with_level(
-        symbols: Vec<String>,
-        level: u8,
-        data_sender: mpsc::Sender<String>,
-        close_receiver: mpsc::Receiver<bool>,
-    ) -> BiAnResult<()> {
+    pub async fn depth_with_level(symbols: Vec<String>, level: u8) -> BiAnResult<Self> {
         if ![5u8, 10u8, 20u8].contains(&level) {
             panic!("argument error: <{}> is not the valid depth level", level)
         }
         let symbols: Vec<String> = symbols.iter().map(|x| x.to_lowercase()).collect();
         let channel = format!("depth{}@100ms", level);
-        Ok(Self::sub_channel(&channel, symbols, data_sender, close_receiver).await?)
+        Self::new(&channel, symbols).await
     }
 
     /// 以ws_client的方式订阅"增量深度信息"(将"阻塞"当前异步任务)  
     /// 每100毫秒推送orderbook的变化部分(如果有)  
     /// symbols参数忽略大小写  
-    pub async fn depth_incr(
-        symbols: Vec<String>,
-        data_sender: mpsc::Sender<String>,
-        close_receiver: mpsc::Receiver<bool>,
-    ) -> BiAnResult<()> {
+    pub async fn depth_incr(symbols: Vec<String>) -> BiAnResult<Self> {
         let symbols: Vec<String> = symbols.iter().map(|x| x.to_lowercase()).collect();
-        Ok(Self::sub_channel("depth@100ms", symbols, data_sender, close_receiver).await?)
+        Self::new("depth@100ms", symbols).await
     }
 
     /// 以ws_client的方式订阅"Websocket账户信息推送"(将"阻塞"当前异步任务)  
     ///
     /// 包括账户更新、余额更新、订单更新，参考(<https://binance-docs.github.io/apidocs/spot/cn/#websocket-2>)  
-    pub async fn account(
-        listen_key: String,
-        data_sender: mpsc::Sender<String>,
-        close_receiver: mpsc::Receiver<bool>,
-    ) -> BiAnResult<()> {
-        Ok(Self::sub_channel(&listen_key, vec![], data_sender, close_receiver).await?)
+    pub async fn account(listen_key: String) -> BiAnResult<Self> {
+        Self::new(&listen_key, vec![]).await
     }
 }

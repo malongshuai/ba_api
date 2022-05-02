@@ -34,9 +34,6 @@ async fn websocket() {
     // 创建mpsc通道用来接收websocket推送的数据，接收到的数据都是String类型
     let (data_sender, mut data_receiver) = mpsc::channel::<String>(1000);
 
-    // 创建mpsc通道，用来传输是否要关闭websocket连接的通知
-    let (close_sender, close_receiver) = mpsc::channel::<bool>(1);
-
     // 新生成一个任务使用data_receiver不断接收websocket推送的数据，并将其反序列化为账户信息
     tokio::spawn(async move {
         while let Some(x) = data_receiver.recv().await {
@@ -44,6 +41,9 @@ async fn websocket() {
             println!("channel received: {:?}", data);
         }
     });
+
+    let ws_client = WsClient::account(listen_key).await.unwrap();
+    let close_sender = ws_client.close_sender().await;
 
     // 新生成一个任务使用close_sender来发送关闭websocket连接的通知，发送true表示强制关闭，不再自动重建连接，发送false表示关闭连接但会自动重连
     tokio::spawn(async move {
@@ -53,7 +53,5 @@ async fn websocket() {
     });
 
     // 订阅币安的账户更新通道，币安推送的余额更新、订单更新信息等都将会接收到，并通过data_sender发送出去(发送的是String类型)
-    WsClient::account(listen_key, data_sender, close_receiver)
-        .await
-        .unwrap();
+    ws_client.sub_channel(data_sender).await.unwrap()
 }

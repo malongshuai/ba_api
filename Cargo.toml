@@ -21,7 +21,7 @@ lazy_static = "1.4.0"
 chrono = "0.4.19"
 
 [dev-dependencies]
-tokio = { version = "1.14.0", features = ["full"] }
+tokio = { version = "1.18.0", features = ["full", "tracing"] }
 tracing-subscriber = "0.3.3"
 
 [lib]
