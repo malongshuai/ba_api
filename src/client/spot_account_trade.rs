@@ -258,7 +258,9 @@ impl RestConn {
         Ok(listen_key.listen_key)
     }
 
-    /// 生成或延迟现货账户的ListenKey，如果当前现货账户没有ListenKey，则生成一个新的ListenKey，有效期60分钟，如果已有，则延长该ListenKey有效期60分钟
+    /// 生成或延迟现货账户的ListenKey，
+    /// 如果当前现货账户没有ListenKey，则生成一个新的ListenKey，有效期60分钟，
+    /// 如果当前现货账户已有ListenKey，则延长该ListenKey有效期60分钟并返回该Key
     #[instrument(skip(self))]
     pub async fn new_spot_listen_key(&self) -> BiAnResult<String> {
         let params = PListenKey::new(None, None);

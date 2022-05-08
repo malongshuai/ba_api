@@ -245,7 +245,10 @@ impl WsClient {
                             break;
                         }
                     }
-                    None => warn!("ws close channel closed"),
+                    None => {
+                        warn!("ws close channel closed");
+                        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                    }
                 }
             }
         });
