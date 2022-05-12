@@ -131,6 +131,38 @@ impl RestConn {
         Ok(order)
     }
 
+    /// 限价单接口
+    /// side: 不区分大小写的 buy/sell
+    /// qty:
+    ///   - 当side为买入时，表示买入报价资产的数量。例如要买入BTCUSDT，该数量表示要买入多少USDT的BTC
+    ///   - 当side为卖出时，表示要卖出的币的数量
+    #[instrument(skip(self))]
+    pub async fn market_order(
+        &self,
+        symbol: &str,
+        side: &str,
+        qty: f64,
+    ) -> BiAnResult<Order> {
+        let order = self
+            .order(
+                symbol,
+                side,
+                "market",
+                Some("gtc"),
+                None,
+                Some(qty),
+                None,
+                None,
+                None,
+                None,
+                Some("Full"),
+            )
+            .await?;
+        Ok(order)
+    }
+
+
+
     /// 撤单
     /// order_id和orig_client_order_id必须指定一个，指定前者表示根据order_id进行撤单，指定后者表示根据订单的client_order_id进行撤单。new_client_order_id是为当前撤单操作指定一个client_order_id，若省略则自动生成
     #[instrument(skip(self))]

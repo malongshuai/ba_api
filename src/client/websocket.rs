@@ -77,9 +77,10 @@ impl WS {
         loop {
             if let Ok((ws_stream, _response)) = connect_async(&self.url).await {
                 self.conn_stream = ws_stream;
+                warn!("build websocket stream success: {}", self.url);
                 break;
             }
-            warn!("retry to build websocket stream");
+            warn!("retry to build websocket stream: {}", self.url);
             tokio::time::sleep(dur).await;
         }
     }
@@ -224,7 +225,7 @@ impl WsClient {
                             ws.handle_msg(msg, data_sender.clone()).await;
                         }
                         Err(e) => {
-                            warn!("ws closed: {}, {}", ws.names.join(","), e);
+                            warn!("ws closed: {}, {}", ws.url, e);
                             ws.replace_inner_stream().await;
                         }
                     }
