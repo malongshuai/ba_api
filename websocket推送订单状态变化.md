@@ -70,6 +70,42 @@
 }
 ```
 
+### 市价买单
+
+```
+{
+	symbol: "LOKAUSDT",
+	client_order_id: "f9iOiPGywxn6VUEqQUBALk",
+	side: Buy,
+	order_type: Market,
+	time_in_force: GTC,
+	qty: 11.6,
+	price: 0.0,
+	stop_price: 0.0,
+	delta: None,
+	iceberg_qty: 0.0,
+	order_list_id: -1,
+	orig_client_order_id: "",
+	order_action: New,
+	order_status: New,
+	reason: "NONE",
+	order_id: 93768149,
+	last_qty: 0.0,
+	cummulative_qty: 0.0,
+	last_price: 0.0,
+	fee_qty: 0.0,
+	fee_quote: None,
+	trade_time: 1652416618993,
+	trade_id: -1,
+	in_order_book: true,
+	maker: false,
+	order_create_time: 1652416618993,
+	cummulative_vol: 0.0,
+	last_vol: 0.0,
+	quote_order_qty: 15.0
+}
+```
+
 ## 成交
 
 ### 完全成交
@@ -176,6 +212,44 @@
 	quote_order_qty: 0.0
 }
 ```
+
+### 市价单成交
+
+```
+{
+	symbol: "LOKAUSDT",
+	client_order_id: "f9iOiPGywxn6VUEqQUBALk",
+	side: Buy,
+	order_type: Market,
+	time_in_force: GTC,
+	qty: 11.6,
+	price: 0.0,        // 市价单成交时无价格
+	stop_price: 0.0,
+	delta: None,
+	iceberg_qty: 0.0,
+	order_list_id: -1,
+	orig_client_order_id: "",
+	order_action: Trade,
+	order_status: Filled,
+	reason: "NONE",
+	order_id: 93768149,
+	last_qty: 11.6,
+	cummulative_qty: 11.6,
+	last_price: 1.2827,
+	fee_qty: 0.0116,
+	fee_quote: Some("LOKA"),
+	trade_time: 1652416618993,
+	trade_id: 12774130,
+	in_order_book: false,
+	maker: false,
+	order_create_time: 1652416618993,
+	cummulative_vol: 14.87932,
+	last_vol: 14.87932,
+	quote_order_qty: 15.0
+}
+```
+
+
 
 ## 撤单
 

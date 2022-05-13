@@ -425,6 +425,12 @@ impl POrder {
                       format!("qty({:?}) and quote_order_qty({:?}) can't be omitted when order type is MARKET", 
                       qty, quote_order_qty)));
                 }
+                if tif.is_some() {
+                    return Err(BiAnApiError::ArgumentError(format!(
+                        "TimeInForce({:?}) can't be set when order type is MARKET",
+                        tif
+                    )));
+                }
             }
             OrderType::StopLoss | OrderType::TakeProfit => {
                 if !(qty.is_some() && stop_price.is_some()) {

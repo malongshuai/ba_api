@@ -148,7 +148,7 @@ impl RestConn {
                 symbol,
                 side,
                 "market",
-                Some("gtc"),
+                None,
                 None,
                 Some(qty),
                 None,
