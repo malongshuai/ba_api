@@ -212,7 +212,7 @@ impl WsClient {
     /// ```
     pub async fn sub_channel(&self, data_sender: mpsc::Sender<String>) -> BiAnResult<()> {
         let ws_self = self.clone();
-        //^ 循环不断地接收ws的信息，当无法重建ws时才返回
+        //@ 循环不断地接收ws的信息，当无法重建ws时才返回
         let mut msg_handle_task = tokio::spawn(async move {
             loop {
                 if data_sender.is_closed() {
