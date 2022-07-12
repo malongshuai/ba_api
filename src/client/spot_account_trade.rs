@@ -216,7 +216,7 @@ impl RestConn {
         Ok(open_orders_info)
     }
 
-    /// 查询某交易对或所有交易对下的所有当前挂单信息
+    /// 查询某交易对的所有当前订单信息(包括历史订单)
     #[instrument(skip(self))]
     pub async fn get_all_orders(
         &self,

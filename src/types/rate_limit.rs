@@ -44,7 +44,7 @@ pub mod api_rate_limit {
     use chrono::{Timelike, Utc};
     use std::{sync::Arc, time::Duration};
     use tokio::{sync::RwLock, task, time};
-    use tracing::{trace};
+    use tracing::trace;
     /// IP限频，除了下单操作，都采用IP限频规则
     #[derive(Debug)]
     struct IPRateLimit {

@@ -17,7 +17,6 @@ thiserror = "1.0.30"
 tracing = "0.1.29"
 serde_urlencoded = "0.7.0"
 futures-util = "0.3.17"
-lazy_static = "1.4.0"
 chrono = "0.4.19"
 
 [dev-dependencies]

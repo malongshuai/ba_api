@@ -57,7 +57,7 @@ impl WS {
             return Err(BiAnApiError::TooManySubscribes(names.len()));
         }
 
-        let base_url = *WS_BASE_URL;
+        let base_url = WS_BASE_URL;
         let names: Vec<String> = names.iter().map(|x| x.to_string()).collect();
         let url = Self::make_ws_url(channel, &names, base_url);
 

@@ -12,7 +12,11 @@ pub enum Permission {
     Futures,
     Leveraged,
     #[allow(non_camel_case_types)]
+    TrdGrp_002,
+    #[allow(non_camel_case_types)]
     TrdGrp_003,
+    #[allow(non_camel_case_types)]
+    TrdGrp_004,
 }
 
 /// 账户类型
@@ -24,7 +28,11 @@ pub enum AccountType {
     Futures,
     Leveraged,
     #[allow(non_camel_case_types)]
+    TrdGrp_002,
+    #[allow(non_camel_case_types)]
     TrdGrp_003,
+    #[allow(non_camel_case_types)]
+    TrdGrp_004,
 }
 
 /// 账户余额信息

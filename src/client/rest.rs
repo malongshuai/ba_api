@@ -85,8 +85,8 @@ impl FromStr for RestMethod {
 #[derive(Debug, Clone)]
 pub struct RestConn {
     conn: reqwest::Client,
-    api_key: String,
-    sec_key: String,
+    api_key: Arc<String>,
+    sec_key: Arc<String>,
     base_url: Url,
     rate_limit: APIRateLimit,
     exchange_info: Arc<Option<ExchangeInfo>>,
@@ -124,9 +124,9 @@ impl RestConn {
 
         let mut rest_conn = RestConn {
             conn,
-            api_key,
-            sec_key,
-            base_url: Url::parse(*REST_BASE_URL).unwrap(),
+            api_key: Arc::new(api_key),
+            sec_key: Arc::new(sec_key),
+            base_url: Url::parse(REST_BASE_URL).unwrap(),
             rate_limit: APIRateLimit::new().await,
             exchange_info: Arc::new(None),
         };
