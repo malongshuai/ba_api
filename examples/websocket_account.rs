@@ -4,6 +4,7 @@ use ba_api::WsResponse;
 use std::time::Duration;
 use tokio::sync::mpsc;
 use tracing::debug;
+use tracing::info;
 
 // 替换为你自己的API KEY和Secret Key
 const API_KEY: &str = "abcdefdjklfasjfklasdjflas";
@@ -21,12 +22,7 @@ async fn main() {
 #[allow(dead_code)]
 async fn websocket() {
     // 创建http连接
-    let rest_conn = RestConn::new(
-        API_KEY.to_string(),
-        SEC_KEY.to_string(),
-        Some("http://127.0.0.1:8118".to_string()),
-    )
-    .await;
+    let rest_conn = RestConn::new(API_KEY.to_string(), SEC_KEY.to_string(), None).await;
 
     // 生成一个ListenKey以便使用websocket订阅账户更新信息
     let listen_key = rest_conn.new_spot_listen_key().await.unwrap();
@@ -38,7 +34,7 @@ async fn websocket() {
     tokio::spawn(async move {
         while let Some(x) = data_receiver.recv().await {
             let data = serde_json::from_str::<WsResponse>(&x);
-            println!("channel received: {:?}", data);
+            info!("channel received: {:?}", data);
         }
     });
 

@@ -11,12 +11,14 @@ pub enum Permission {
     Margin,
     Futures,
     Leveraged,
-    #[allow(non_camel_case_types)]
-    TrdGrp_002,
-    #[allow(non_camel_case_types)]
-    TrdGrp_003,
-    #[allow(non_camel_case_types)]
-    TrdGrp_004,
+    // #[allow(non_camel_case_types)]
+    // TrdGrp_002,
+    // #[allow(non_camel_case_types)]
+    // TrdGrp_003,
+    // #[allow(non_camel_case_types)]
+    // TrdGrp_004,
+    #[serde(other)]
+    Unknown,
 }
 
 /// 账户类型
@@ -27,12 +29,14 @@ pub enum AccountType {
     Margin,
     Futures,
     Leveraged,
-    #[allow(non_camel_case_types)]
-    TrdGrp_002,
-    #[allow(non_camel_case_types)]
-    TrdGrp_003,
-    #[allow(non_camel_case_types)]
-    TrdGrp_004,
+    // #[allow(non_camel_case_types)]
+    // TrdGrp_002,
+    // #[allow(non_camel_case_types)]
+    // TrdGrp_003,
+    // #[allow(non_camel_case_types)]
+    // TrdGrp_004,
+    #[serde(other)]
+    Unknown
 }
 
 /// 账户余额信息

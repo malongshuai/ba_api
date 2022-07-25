@@ -215,7 +215,7 @@
 
 ### 市价单成交
 
-```
+```ruby
 {
 	symbol: "LOKAUSDT",
 	client_order_id: "f9iOiPGywxn6VUEqQUBALk",
