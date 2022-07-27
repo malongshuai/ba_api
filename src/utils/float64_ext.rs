@@ -1,4 +1,5 @@
 pub trait FloatPercent {
+    /// (n - self) / self
     fn percent(&self, n: f64) -> f64;
 }
 
