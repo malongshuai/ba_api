@@ -1,5 +1,8 @@
+use std::collections::HashMap;
+
 use crate::client::string_to_f64;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use super::{account::Permission, order::OrderType, rate_limit::RateLimit};
 
@@ -93,6 +96,22 @@ pub enum SymbolFilter {
         min_trailing_below_delta: u64,
         max_trailing_below_delta: u64,
     },
+
+    #[serde(rename = "PERCENT_PRICE_BY_SIDE", rename_all = "camelCase")]
+    PercentPriceBySide {
+        #[serde(deserialize_with = "string_to_f64")]
+        bid_multiplier_up: f64,
+        #[serde(deserialize_with = "string_to_f64")]
+        bid_multiplier_down: f64,
+        #[serde(deserialize_with = "string_to_f64")]
+        ask_multiplier_up: f64,
+        #[serde(deserialize_with = "string_to_f64")]
+        ask_multiplier_down: f64,
+        avg_price_mins: u32,
+    },
+
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -119,6 +138,9 @@ pub struct SymbolInfo {
     pub filters: Vec<SymbolFilter>,
     /// 未来会替代is_(spot|margin)_trading_allowed字段
     pub permissions: Vec<Permission>,
+    /// 未来可能添加新字段，全部放入此处，避免直接报错
+    #[serde(flatten)]
+    pub extra: HashMap<String, Value>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
