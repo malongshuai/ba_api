@@ -1,8 +1,10 @@
 pub mod client;
 pub mod errors;
+pub mod misc;
 pub mod types;
 pub mod utils;
 
+pub use misc::check_coin_warning;
 pub use types::account::*;
 pub use types::depth::*;
 pub use types::kline::*;
