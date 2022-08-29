@@ -208,16 +208,20 @@ impl RestConn {
         Ok(avg_price)
     }
 
-    /// 获取某交易对或所有交易对的24小时价格变动信息  
-    /// symbol为None时返回所有交易对的24时价格变动信息(返回数据量巨大，且请求的权重极大)
+    /// 获取某交易对或所有交易对的24小时价格变动的详细信息  
+    /// symbols为None时返回所有交易对的24时价格变动信息(返回数据量巨大，且请求的权重极大)
     #[instrument(skip(self))]
-    pub async fn hr24(&self, symbol: Option<&str>) -> BiAnResult<FullTickers> {
+    pub async fn hr24(&self, symbols: Option<Vec<&str>>) -> BiAnResult<FullTickers> {
         let path = "/api/v3/ticker/24hr";
-        let rate_limit = match symbol {
-            Some(_) => 1,
+        let rate_limit = match &symbols {
+            Some(v) => match v.len() {
+                1..=20 => 1,
+                21..=100 => 20,
+                _ => 40,
+            },
             None => 40,
         };
-        let params = PHr24::new(symbol);
+        let params = PHr24::new(symbols, true);
         let res = self.rest_req("get", path, params, Some(rate_limit)).await?;
         let hrs = serde_json::from_str::<FullTickers>(&res)?;
         Ok(hrs)

@@ -290,11 +290,11 @@ pub struct AggTrade {
 
     /// 该归集的首个成交ID
     #[serde(rename = "f")]
-    pub first_id: u64,
+    pub first_id: i64,
 
     /// 该归集的末个成交ID
     #[serde(rename = "l")]
-    pub last_id: u64,
+    pub last_id: i64,
 
     /// 该归集的成交时间
     #[serde(rename = "T")]

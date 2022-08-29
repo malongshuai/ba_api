@@ -142,9 +142,9 @@ pub struct FullTicker {
     /// 统计结束时间(即当前时间)
     pub close_time: u64,
     /// 24小时区间的第一笔成交ID
-    pub first_id: u64,
+    pub first_id: i64,
     /// 24小时区间的最后一笔成交ID(即最近一次的成交ID)
-    pub last_id: u64,
+    pub last_id: i64,
     /// 24小时区间的成交笔数
     pub count: u64,
 }
@@ -282,10 +282,10 @@ struct RestFullHr24 {
     close_time: u64,
 
     /// 24小时区间的第一笔成交ID
-    first_id: u64,
+    first_id: i64,
 
     /// 24小时区间的最后一笔成交ID(即最近一次的成交ID)
-    last_id: u64,
+    last_id: i64,
 
     /// 24小时区间的成交笔数
     count: u64,
@@ -382,11 +382,11 @@ struct WebSocketFullTicker {
 
     /// 24小时区间的第一笔成交ID
     #[serde(rename = "F")]
-    first_id: u64,
+    first_id: i64,
 
     /// 24小时区间的最后一笔成交ID(即最近一次的成交ID)
     #[serde(rename = "L")]
-    last_id: u64,
+    last_id: i64,
 
     /// 24小时区间的成交笔数
     #[serde(rename = "n")]

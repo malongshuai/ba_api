@@ -361,19 +361,43 @@ impl Param for PBookTicker {}
 
 #[derive(Debug, Serialize)]
 pub struct PHr24 {
-    symbol: Option<String>,
+    symbols: Option<Vec<String>>,
 }
 impl PHr24 {
-    pub fn new(symbol: Option<&str>) -> Self {
-        match symbol {
-            None => Self { symbol: None },
-            Some(s) => Self {
-                symbol: Some(s.to_string()),
+    #[allow(clippy::new_ret_no_self)]
+    pub fn new(symbols: Option<Vec<&str>>, is_full_tick: bool) -> PHr24Real {
+        let tick_type = if is_full_tick { "FULL" } else { "MINI" }.to_owned();
+        match symbols {
+            None => PHr24Real {
+                symbols: None,
+                tick_type,
             },
+            Some(s) => {
+                if s.is_empty() {
+                    PHr24Real {
+                        symbols: None,
+                        tick_type,
+                    }
+                } else {
+                    let j: Vec<String> = s.iter().map(|x| format!(r#""{}""#, x)).collect();
+                    PHr24Real {
+                        symbols: Some(format!("[{}]", j.join(","))),
+                        tick_type,
+                    }
+                }
+            }
         }
     }
 }
-impl Param for PHr24 {}
+
+#[derive(Debug, Serialize)]
+pub struct PHr24Real {
+    #[serde(rename = "type")]
+    tick_type: String,
+    symbols: Option<String>,
+}
+
+impl Param for PHr24Real {}
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
