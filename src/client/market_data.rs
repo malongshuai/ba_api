@@ -209,17 +209,14 @@ impl RestConn {
     }
 
     /// 获取某交易对或所有交易对的24小时价格变动的详细信息  
-    /// symbols为None时返回所有交易对的24时价格变动信息(返回数据量巨大，且请求的权重极大)
+    /// symbols为空时返回所有交易对的24时价格变动信息(返回数据量巨大，且请求的权重极大)
     #[instrument(skip(self))]
-    pub async fn hr24(&self, symbols: Option<Vec<&str>>) -> BiAnResult<FullTickers> {
+    pub async fn hr24(&self, symbols: Vec<&str>) -> BiAnResult<FullTickers> {
         let path = "/api/v3/ticker/24hr";
-        let rate_limit = match &symbols {
-            Some(v) => match v.len() {
-                1..=20 => 1,
-                21..=100 => 20,
-                _ => 40,
-            },
-            None => 40,
+        let rate_limit = match &symbols.len() {
+            1..=20 => 1,
+            21..=100 => 20,
+            _ => 40,
         };
         let params = PHr24::new(symbols);
         let res = self.rest_req("get", path, params, Some(rate_limit)).await?;
@@ -228,13 +225,13 @@ impl RestConn {
     }
 
     /// 获取某交易对或所有交易对的最新价格(实时价)  
-    /// symbol为None时返回所有交易对的实时价格
+    /// symbol为空时返回所有交易对的实时价格
     #[instrument(skip(self))]
-    pub async fn price(&self, symbols: Option<Vec<&str>>) -> BiAnResult<Prices> {
+    pub async fn price(&self, symbols: Vec<&str>) -> BiAnResult<Prices> {
         let path = "/api/v3/ticker/price";
-        let rate_limit = match symbols {
-            Some(_) => 1,
-            None => 2,
+        let rate_limit = match symbols.len() {
+            1 => 1,
+            _ => 2,
         };
         let params = PPrice::new(symbols);
         let res = self.rest_req("get", path, params, Some(rate_limit)).await?;
@@ -243,13 +240,13 @@ impl RestConn {
     }
 
     /// 获取某交易对或所有交易对的最优挂单价  
-    /// symbol为None时返回所有交易对的信息
+    /// symbol为空时返回所有交易对的信息
     #[instrument(skip(self))]
-    pub async fn book_ticker(&self, symbols: Option<Vec<&str>>) -> BiAnResult<BookTickers> {
+    pub async fn book_ticker(&self, symbols: Vec<&str>) -> BiAnResult<BookTickers> {
         let path = "/api/v3/ticker/bookTicker";
-        let rate_limit = match symbols {
-            Some(_) => 1,
-            None => 2,
+        let rate_limit = match symbols.len() {
+            1 => 1,
+            _ => 2,
         };
         let params = PBookTicker::new(symbols);
         let res = self.rest_req("get", path, params, Some(rate_limit)).await?;

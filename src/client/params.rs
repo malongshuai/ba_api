@@ -340,16 +340,21 @@ impl Param for PAvgPrice {}
 
 #[derive(Debug, Serialize)]
 pub struct PPrice {
+    symbol: Option<String>,
     symbols: Option<String>,
 }
 impl PPrice {
-    #[allow(clippy::new_ret_no_self)]
-    pub fn new(symbols: Option<Vec<&str>>) -> Self {
-        match symbols {
-            None => Self { symbols: None },
-            Some(s) => Self {
-                symbols: list_2_str(s),
-            },
+    pub fn new(symbols: Vec<&str>) -> Self {
+        if symbols.len() == 1 {
+            Self {
+                symbol: Some(symbols[0].to_string()),
+                symbols: None,
+            }
+        } else {
+            Self {
+                symbols: list_2_str(symbols),
+                symbol: None,
+            }
         }
     }
 }
@@ -357,15 +362,21 @@ impl Param for PPrice {}
 
 #[derive(Debug, Serialize)]
 pub struct PBookTicker {
+    symbol: Option<String>,
     symbols: Option<String>,
 }
 impl PBookTicker {
-    pub fn new(symbol: Option<Vec<&str>>) -> Self {
-        match symbol {
-            None => Self { symbols: None },
-            Some(s) => Self {
-                symbols: list_2_str(s),
-            },
+    pub fn new(symbols: Vec<&str>) -> Self {
+        if symbols.len() == 1 {
+            Self {
+                symbol: Some(symbols[0].to_string()),
+                symbols: None,
+            }
+        } else {
+            Self {
+                symbols: list_2_str(symbols),
+                symbol: None,
+            }
         }
     }
 }
@@ -375,15 +386,21 @@ impl Param for PBookTicker {}
 pub struct PHr24 {
     // #[serde(rename = "type")]
     // tick_type: String,
+    symbol: Option<String>,
     symbols: Option<String>,
 }
 impl PHr24 {
-    pub fn new(symbols: Option<Vec<&str>>) -> Self {
-        match symbols {
-            None => Self { symbols: None },
-            Some(s) => Self {
-                symbols: list_2_str(s),
-            },
+    pub fn new(symbols: Vec<&str>) -> Self {
+        if symbols.len() == 1 {
+            Self {
+                symbol: Some(symbols[0].to_string()),
+                symbols: None,
+            }
+        } else {
+            Self {
+                symbols: list_2_str(symbols),
+                symbol: None,
+            }
         }
     }
 }
