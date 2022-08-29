@@ -5,6 +5,17 @@ use crate::{
 };
 use serde::{ser::SerializeStruct, Deserialize, Serialize};
 
+/// 将Symbol列表转换为URL参数字符串
+/// 例如，将["BTCUSDT", "ETHUSDT"]转换为字符串：'["BTCUSDT","ETHUSDT"]'
+/// 即为每个sym元素加上双引号包围，并使用逗号连接各元素，最后将它们放进"[]"符号中间
+fn list_2_str(symbols: Vec<&str>) -> Option<String> {
+    if symbols.is_empty() {
+        return None;
+    }
+    let j: Vec<String> = symbols.iter().map(|x| format!(r#""{}""#, x)).collect();
+    Some(format!("[{}]", j.join(",")))
+}
+
 /// 接口鉴权类型  
 /// None无需API KEY鉴权，也无需SECRET KEY签名  
 /// UserStream和MarketData需API KEY鉴权，但无需SECRET KEY签名  
@@ -329,14 +340,15 @@ impl Param for PAvgPrice {}
 
 #[derive(Debug, Serialize)]
 pub struct PPrice {
-    symbol: Option<String>,
+    symbols: Option<String>,
 }
 impl PPrice {
-    pub fn new(symbol: Option<&str>) -> Self {
-        match symbol {
-            None => Self { symbol: None },
+    #[allow(clippy::new_ret_no_self)]
+    pub fn new(symbols: Option<Vec<&str>>) -> Self {
+        match symbols {
+            None => Self { symbols: None },
             Some(s) => Self {
-                symbol: Some(s.to_string()),
+                symbols: list_2_str(s),
             },
         }
     }
@@ -345,14 +357,14 @@ impl Param for PPrice {}
 
 #[derive(Debug, Serialize)]
 pub struct PBookTicker {
-    symbol: Option<String>,
+    symbols: Option<String>,
 }
 impl PBookTicker {
-    pub fn new(symbol: Option<&str>) -> Self {
+    pub fn new(symbol: Option<Vec<&str>>) -> Self {
         match symbol {
-            None => Self { symbol: None },
+            None => Self { symbols: None },
             Some(s) => Self {
-                symbol: Some(s.to_string()),
+                symbols: list_2_str(s),
             },
         }
     }
@@ -361,43 +373,21 @@ impl Param for PBookTicker {}
 
 #[derive(Debug, Serialize)]
 pub struct PHr24 {
-    symbols: Option<Vec<String>>,
+    // #[serde(rename = "type")]
+    // tick_type: String,
+    symbols: Option<String>,
 }
 impl PHr24 {
-    #[allow(clippy::new_ret_no_self)]
-    pub fn new(symbols: Option<Vec<&str>>, is_full_tick: bool) -> PHr24Real {
-        let tick_type = if is_full_tick { "FULL" } else { "MINI" }.to_owned();
+    pub fn new(symbols: Option<Vec<&str>>) -> Self {
         match symbols {
-            None => PHr24Real {
-                symbols: None,
-                tick_type,
+            None => Self { symbols: None },
+            Some(s) => Self {
+                symbols: list_2_str(s),
             },
-            Some(s) => {
-                if s.is_empty() {
-                    PHr24Real {
-                        symbols: None,
-                        tick_type,
-                    }
-                } else {
-                    let j: Vec<String> = s.iter().map(|x| format!(r#""{}""#, x)).collect();
-                    PHr24Real {
-                        symbols: Some(format!("[{}]", j.join(","))),
-                        tick_type,
-                    }
-                }
-            }
         }
     }
 }
-
-#[derive(Debug, Serialize)]
-pub struct PHr24Real {
-    #[serde(rename = "type")]
-    tick_type: String,
-    symbols: Option<String>,
-}
-
-impl Param for PHr24Real {}
+impl Param for PHr24 {}
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]

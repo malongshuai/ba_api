@@ -221,7 +221,7 @@ impl RestConn {
             },
             None => 40,
         };
-        let params = PHr24::new(symbols, true);
+        let params = PHr24::new(symbols);
         let res = self.rest_req("get", path, params, Some(rate_limit)).await?;
         let hrs = serde_json::from_str::<FullTickers>(&res)?;
         Ok(hrs)
@@ -230,13 +230,13 @@ impl RestConn {
     /// 获取某交易对或所有交易对的最新价格(实时价)  
     /// symbol为None时返回所有交易对的实时价格
     #[instrument(skip(self))]
-    pub async fn price(&self, symbol: Option<&str>) -> BiAnResult<Prices> {
+    pub async fn price(&self, symbols: Option<Vec<&str>>) -> BiAnResult<Prices> {
         let path = "/api/v3/ticker/price";
-        let rate_limit = match symbol {
+        let rate_limit = match symbols {
             Some(_) => 1,
             None => 2,
         };
-        let params = PPrice::new(symbol);
+        let params = PPrice::new(symbols);
         let res = self.rest_req("get", path, params, Some(rate_limit)).await?;
         let prices = serde_json::from_str::<Prices>(&res)?;
         Ok(prices)
@@ -245,13 +245,13 @@ impl RestConn {
     /// 获取某交易对或所有交易对的最优挂单价  
     /// symbol为None时返回所有交易对的信息
     #[instrument(skip(self))]
-    pub async fn book_ticker(&self, symbol: Option<&str>) -> BiAnResult<BookTickers> {
+    pub async fn book_ticker(&self, symbols: Option<Vec<&str>>) -> BiAnResult<BookTickers> {
         let path = "/api/v3/ticker/bookTicker";
-        let rate_limit = match symbol {
+        let rate_limit = match symbols {
             Some(_) => 1,
             None => 2,
         };
-        let params = PBookTicker::new(symbol);
+        let params = PBookTicker::new(symbols);
         let res = self.rest_req("get", path, params, Some(rate_limit)).await?;
         let tickers = serde_json::from_str::<BookTickers>(&res)?;
         Ok(tickers)
