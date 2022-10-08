@@ -37,7 +37,7 @@ impl FloatPrecision for f64 {
         if (frac - 0.0).abs() < f64::EPSILON {
             return 0u8;
         }
-        (frac.to_string().len() - 2) as u8
+        (frac.to_string().len() - i.to_string().len() - 1) as u8
     }
 }
 

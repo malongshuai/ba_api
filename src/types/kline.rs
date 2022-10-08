@@ -129,6 +129,44 @@ pub struct RawKLine {
     pub count: u64,
 }
 
+impl From<KLine> for RawKLine {
+    fn from(data: KLine) -> Self {
+        Self {
+            symbol: data.symbol,
+            epoch: data.epoch,
+            close_epoch: data.close_epoch,
+            high: data.high,
+            close: data.close,
+            low: data.low,
+            open: data.open,
+            count: data.count,
+            amount: data.amount,
+            vol: data.vol,
+            finish: data.finish,
+            interval: data.interval,
+        }
+    }
+}
+
+impl From<RawKLine> for KLine {
+    fn from(data: RawKLine) -> Self {
+        Self {
+            symbol: data.symbol,
+            epoch: data.epoch,
+            close_epoch: data.close_epoch,
+            high: data.high,
+            close: data.close,
+            low: data.low,
+            open: data.open,
+            count: data.count,
+            amount: data.amount,
+            vol: data.vol,
+            finish: data.finish,
+            interval: data.interval,
+        }
+    }
+}
+
 #[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 struct RestKLine {
@@ -267,22 +305,22 @@ mod kline_test {
 
     #[test]
     fn raw_kline() {
-      //   let str = r##"
-      //       {
-      //         "symbol": "BTCUSDT",
-      //         "interval": "1m",
-      //         "epoch":1641909600000,
-      //         "close_epoch":1641909659999,
-      //         "finish":true,
-      //         "open":41700.74,
-      //         "high":41700.74,
-      //         "low":41646.69,
-      //         "close":41665.83,
-      //         "amount":9.03677,
-      //         "vol":376549.1409579,
-      //         "count":599
-      //       }
-      // "##;
+        //   let str = r##"
+        //       {
+        //         "symbol": "BTCUSDT",
+        //         "interval": "1m",
+        //         "epoch":1641909600000,
+        //         "close_epoch":1641909659999,
+        //         "finish":true,
+        //         "open":41700.74,
+        //         "high":41700.74,
+        //         "low":41646.69,
+        //         "close":41665.83,
+        //         "amount":9.03677,
+        //         "vol":376549.1409579,
+        //         "count":599
+        //       }
+        // "##;
 
         // let kline = serde_json::from_str::<KLine>(str);
         // println!("{:?}", kline);
