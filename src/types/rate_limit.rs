@@ -41,10 +41,12 @@ pub struct RateLimitInfo {
 /// 由于每个接口的权重值都较大(ip类限速是每分钟12000，UID类是每分钟180000)，理论上无需去限速  
 ///
 pub mod api_rate_limit {
-    use chrono::{Timelike, Utc};
+    use chrono::Timelike;
     use std::{sync::Arc, time::Duration};
     use tokio::{sync::RwLock, task, time};
     use tracing::trace;
+
+    use crate::now0;
     /// IP限频，除了下单操作，都采用IP限频规则
     #[derive(Debug)]
     struct IPRateLimit {
@@ -353,7 +355,7 @@ pub mod api_rate_limit {
 
             // 先对齐到秒的开头
             loop {
-                let now = Utc::now().nanosecond();
+                let now = now0().nanosecond();
                 // 在秒的前10毫秒
                 if now <= 10_000_000 {
                     break;
@@ -363,7 +365,7 @@ pub mod api_rate_limit {
 
             let mut intv = time::interval(tick_interval);
             loop {
-                let now = Utc::now();
+                let now = now0();
                 let (h, m, s) = (now.hour(), now.minute(), now.second());
 
                 // 整10秒时(延迟1秒)，如果是UTC 00:00:00，则同时重置秒级和日级的限速值(放在一起重置将只获取一次写锁)，否则只重置秒级
@@ -387,11 +389,10 @@ pub mod api_rate_limit {
     // #[cfg(test)]
     // mod test_rate_limit {
     //     use super::*;
-    //     use chrono::Local;
     //     use tokio::time;
 
     //     fn now() -> String {
-    //         Local::now().format("%FT%T.%3f").to_string()
+    //         now8().format("%FT%T.%3f").to_string()
     //     }
 
     //     #[tokio::test]
