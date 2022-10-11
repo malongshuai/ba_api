@@ -45,7 +45,7 @@ impl RestConn {
 
         let mtime = file.metadata().await?.modified()?;
         let duration = SystemTime::now().duration_since(mtime)?.as_secs();
-        if duration > 86400 {
+        if duration > 1800 {
             return Ok(None);
         }
 
