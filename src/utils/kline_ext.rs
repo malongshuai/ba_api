@@ -15,12 +15,12 @@ pub trait KLineExt {
     /// (low - open) / open
     fn rate_ol(&self) -> f64;
 
-    /// 下影线的长度：
+    /// 下影线的长度(小于0)：
     /// close < open => (low - close) / close
     /// close >= open => (low - open) / open
     fn rate_cl(&self) -> f64;
 
-    /// 上影线影线的长度：
+    /// 上影线影线的长度(大于0)：
     /// close < open => (high - open) / open
     /// close >= open => (high - close) / close
     fn rate_ch(&self) -> f64;

@@ -325,12 +325,13 @@ impl WsClient {
         Self::new("bookTicker", symbols).await
     }
 
-    /// 以ws_client的方式订阅"全市场最优挂单信息"(将"阻塞"当前异步任务)  
-    /// 实时推送所有交易对最优挂单信息
-    pub async fn all_bookticker() -> BiAnResult<Self> {
-        let names: Vec<String> = vec![];
-        Self::new("!bookTicker", names).await
-    }
+    // 2022-11月将下线 !bookTicker 的订阅通道
+    // /// 以ws_client的方式订阅"全市场最优挂单信息"(将"阻塞"当前异步任务)
+    // /// 实时推送所有交易对最优挂单信息
+    // pub async fn all_bookticker() -> BiAnResult<Self> {
+    //     let names: Vec<String> = vec![];
+    //     Self::new("!bookTicker", names).await
+    // }
 
     /// 以ws_client的方式订阅"有限档深度信息"(将"阻塞"当前异步任务)  
     /// 每100毫秒推送有限档深度信息。level表示几档买卖单信息, 可选5/10/20档  

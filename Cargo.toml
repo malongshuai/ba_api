@@ -23,7 +23,7 @@ chrono = "0.4.19"
 tokio = { version = "1.18.0", features = ["full", "tracing"] }
 tracing-subscriber = "0.3.3"
 # dashmap = "=5.2.0"
-dashmap = "5.3.2"
+dashmap = "5.4.0"
 
 [lib]
 doctest = false

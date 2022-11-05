@@ -15,7 +15,7 @@ pub use types::rate_limit::*;
 pub use types::symbol_info::*;
 pub use types::ticker::*;
 pub use types::ws_response::*;
-pub use utils::{east8, now0, now8};
+pub use utils::{align_epoch, east8, now0, now8, today0, today8, yestoday0, yestoday8};
 
 pub const STABLE_COINS: [&str; 21] = [
     "AUD", "BIDR", "BRL", "EUR", "GBP", "RUB", "TRY", "TUSD", "USDC", "DAI", "IDRT", "UAH", "NGN",
