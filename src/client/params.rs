@@ -1,7 +1,7 @@
 use crate::{
     errors::{BiAnApiError, BiAnResult},
     types::order::{OrderRespType, OrderSide, OrderType, TimeInForce},
-    KLineInterval,
+    KLineInterval, SubAccountType,
 };
 use serde::{ser::SerializeStruct, Deserialize, Serialize};
 
@@ -558,10 +558,10 @@ pub struct PCancelOpenOrders {
     symbol: String,
 }
 impl PCancelOpenOrders {
-    pub fn new(symbol: &str) -> BiAnResult<PCancelOpenOrders> {
-        Ok(PCancelOpenOrders {
+    pub fn new(symbol: &str) -> PCancelOpenOrders {
+        PCancelOpenOrders {
             symbol: symbol.to_uppercase(),
-        })
+        }
     }
 }
 impl Param for PCancelOpenOrders {
@@ -605,13 +605,11 @@ impl Param for PGetOrder {
 /// 当前挂单
 #[derive(Debug, Serialize)]
 pub struct PGetOpenOrders {
-    symbol: String,
+    symbol: Option<String>,
 }
 impl PGetOpenOrders {
-    pub fn new(symbol: &str) -> BiAnResult<PGetOpenOrders> {
-        Ok(PGetOpenOrders {
-            symbol: symbol.to_uppercase(),
-        })
+    pub fn new(symbol: Option<String>) -> PGetOpenOrders {
+        PGetOpenOrders { symbol }
     }
 }
 impl Param for PGetOpenOrders {
@@ -636,23 +634,14 @@ impl PAllOrders {
         start_time: Option<u64>,
         end_time: Option<u64>,
         limit: Option<u16>,
-    ) -> BiAnResult<PAllOrders> {
-        // if let Some(n) = limit {
-        //     if n >= 1000 {
-        //         return Err(RestApiError::ArgumentError(format!(
-        //             "invalid limit `{}', valid limit(<= 1000)",
-        //             n
-        //         )));
-        //     }
-        // }
-
-        Ok(PAllOrders {
+    ) -> PAllOrders {
+        PAllOrders {
             symbol: symbol.to_uppercase(),
             order_id,
             start_time,
             end_time,
             limit,
-        })
+        }
     }
 }
 impl Param for PAllOrders {
@@ -688,24 +677,15 @@ impl PMyTrades {
         end_time: Option<u64>,
         from_id: Option<u64>,
         limit: Option<u16>,
-    ) -> BiAnResult<PMyTrades> {
-        // if let Some(n) = limit {
-        //     if n >= 1000 {
-        //         return Err(RestApiError::ArgumentError(format!(
-        //             "invalid limit `{}', valid limit(<= 1000)",
-        //             n
-        //         )));
-        //     }
-        // }
-
-        Ok(PMyTrades {
+    ) -> PMyTrades {
+        PMyTrades {
             symbol: symbol.to_uppercase(),
             order_id,
             start_time,
             end_time,
             from_id,
             limit,
-        })
+        }
     }
 }
 impl Param for PMyTrades {
@@ -767,6 +747,94 @@ impl PDust {
     }
 }
 impl Param for PDust {
+    fn check_type(&self) -> CheckType {
+        CheckType::UserData
+    }
+    fn rate_limit(&self) -> PRateLimit {
+        PRateLimit::ApiUid
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PSubAccountList<'a> {
+    email: Option<&'a str>,
+    is_freeze: Option<&'a str>,
+}
+
+impl<'a> PSubAccountList<'a> {
+    pub fn new(email: Option<&'a str>, is_freeze: Option<&'a str>) -> Self {
+        Self { email, is_freeze }
+    }
+}
+impl Param for PSubAccountList<'_> {
+    fn check_type(&self) -> CheckType {
+        CheckType::UserData
+    }
+    fn rate_limit(&self) -> PRateLimit {
+        PRateLimit::ApiIp
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PSubAccountAssets<'a> {
+    email: &'a str,
+}
+
+impl<'a> PSubAccountAssets<'a> {
+    pub fn new(email: &'a str) -> Self {
+        Self { email }
+    }
+}
+impl Param for PSubAccountAssets<'_> {
+    fn check_type(&self) -> CheckType {
+        CheckType::UserData
+    }
+    fn rate_limit(&self) -> PRateLimit {
+        PRateLimit::ApiUid
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PSubAccountUniversalTransfer<'a> {
+    from_email: Option<&'a str>,
+    to_email: Option<&'a str>,
+    from_account_type: SubAccountType,
+    to_account_type: SubAccountType,
+    symbol: Option<&'a str>,
+    asset: String,
+    amount: f64,
+}
+
+impl<'a> PSubAccountUniversalTransfer<'a> {
+    pub fn new(
+        from_email: Option<&'a str>,
+        to_email: Option<&'a str>,
+        from_account_type: &str,
+        to_account_type: &str,
+        asset: &'a str,
+        amount: f64,
+        symbol: Option<&'a str>,
+    ) -> BiAnResult<Self> {
+        if from_email.is_none() && to_email.is_none() {
+            return Err(BiAnApiError::ArgumentError(
+                "both of from_email and to_email are missing".to_string(),
+            ));
+        }
+        Ok(Self {
+            from_email,
+            to_email,
+            from_account_type: SubAccountType::from(from_account_type),
+            to_account_type: SubAccountType::from(to_account_type),
+            symbol,
+            asset: asset.to_uppercase(),
+            amount,
+        })
+    }
+}
+impl Param for PSubAccountUniversalTransfer<'_> {
     fn check_type(&self) -> CheckType {
         CheckType::UserData
     }

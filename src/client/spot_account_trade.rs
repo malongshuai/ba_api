@@ -137,12 +137,7 @@ impl RestConn {
     ///   - 当side为买入时，表示买入报价资产的数量。例如要买入BTCUSDT，该数量表示要买入多少USDT的BTC
     ///   - 当side为卖出时，表示要卖出的币的数量
     #[instrument(skip(self))]
-    pub async fn market_order(
-        &self,
-        symbol: &str,
-        side: &str,
-        qty: f64,
-    ) -> BiAnResult<Order> {
+    pub async fn market_order(&self, symbol: &str, side: &str, qty: f64) -> BiAnResult<Order> {
         let order = self
             .order(
                 symbol,
@@ -160,8 +155,6 @@ impl RestConn {
             .await?;
         Ok(order)
     }
-
-
 
     /// 撤单
     /// order_id和orig_client_order_id必须指定一个，指定前者表示根据order_id进行撤单，指定后者表示根据订单的client_order_id进行撤单。new_client_order_id是为当前撤单操作指定一个client_order_id，若省略则自动生成
@@ -185,7 +178,7 @@ impl RestConn {
     #[instrument(skip(self))]
     pub async fn cancel_open_orders(&self, symbol: &str) -> BiAnResult<Vec<CancelOpenOrdersInfo>> {
         let path = "/api/v3/openOrders";
-        let params = PCancelOpenOrders::new(symbol)?;
+        let params = PCancelOpenOrders::new(symbol);
         let res = self.rest_req("delete", path, params, Some(1)).await?;
         let cancel = serde_json::from_str::<Vec<CancelOpenOrdersInfo>>(&res)?;
         Ok(cancel)
@@ -208,10 +201,14 @@ impl RestConn {
 
     /// 查询某交易对或所有交易对下的所有当前挂单信息
     #[instrument(skip(self))]
-    pub async fn get_open_orders(&self, symbol: &str) -> BiAnResult<Vec<OrderInfo>> {
+    pub async fn get_open_orders(&self, symbol: Option<&str>) -> BiAnResult<Vec<OrderInfo>> {
         let path = "/api/v3/openOrders";
-        let params = PGetOpenOrders::new(symbol)?;
-        let res = self.rest_req("get", path, params, Some(3)).await?;
+        let (sym, rate_limit) = match symbol {
+            Some(s) => (Some(s.to_string()), 3),
+            None => (None, 40),
+        };
+        let params = PGetOpenOrders::new(sym);
+        let res = self.rest_req("get", path, params, Some(rate_limit)).await?;
         let open_orders_info = serde_json::from_str::<Vec<OrderInfo>>(&res)?;
         Ok(open_orders_info)
     }
@@ -227,7 +224,7 @@ impl RestConn {
         limit: Option<u16>,
     ) -> BiAnResult<Vec<OrderInfo>> {
         let path = "/api/v3/allOrders";
-        let params = PAllOrders::new(symbol, order_id, start_time, end_time, limit)?;
+        let params = PAllOrders::new(symbol, order_id, start_time, end_time, limit);
         let res = self.rest_req("get", path, params, Some(10)).await?;
         let all_orders_info = serde_json::from_str::<Vec<OrderInfo>>(&res)?;
         Ok(all_orders_info)
@@ -245,7 +242,7 @@ impl RestConn {
         limit: Option<u16>,
     ) -> BiAnResult<Vec<MyTrades>> {
         let path = "/api/v3/myTrades";
-        let params = PMyTrades::new(symbol, order_id, start_time, end_time, from_id, limit)?;
+        let params = PMyTrades::new(symbol, order_id, start_time, end_time, from_id, limit);
         let res = self.rest_req("get", path, params, Some(10)).await?;
         let trades_info = serde_json::from_str::<Vec<MyTrades>>(&res)?;
         Ok(trades_info)

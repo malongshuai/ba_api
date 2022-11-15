@@ -36,7 +36,31 @@ pub enum AccountType {
     // #[allow(non_camel_case_types)]
     // TrdGrp_004,
     #[serde(other)]
-    Unknown
+    Unknown,
+}
+
+/// 目前用于字母账户划转时的账户类型
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum SubAccountType {
+    Spot,
+    IsolatedMargin,
+    UsdtFuture,
+    CoinFuture,
+    #[serde(other)]
+    Unknown,
+}
+
+impl From<&str> for SubAccountType {
+    fn from(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "spot" => Self::Spot,
+            "usdtfuture" | "usdt_future" => Self::UsdtFuture,
+            "coinfuture" | "coin_future" => Self::CoinFuture,
+            "isolatedmargin" | "isolated_margin" => Self::IsolatedMargin,
+            _ => Self::Unknown,
+        }
+    }
 }
 
 /// 账户余额信息

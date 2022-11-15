@@ -18,6 +18,7 @@ pub mod market_data;
 /// [现货交易接口](rest/struct.RestConn.html#impl-2)，币安API Doc现货账户和现货交易接口下的方法都在此
 pub mod spot_account_trade;
 
+pub mod sub_account;
 /// 钱包相关接口
 pub mod wallet;
 
@@ -25,7 +26,8 @@ pub use rest::*;
 pub use websocket::*;
 
 /// String转换为f64
-pub(crate) fn string_to_f64<'de, D>(deserializer: D) -> Result<f64, D::Error>
+#[allow(dead_code)]
+pub(crate) fn string_to_f641<'de, D>(deserializer: D) -> Result<f64, D::Error>
 where
     D: Deserializer<'de>,
 {
@@ -37,6 +39,32 @@ where
         Str(a) => a.parse::<f64>().map_err(|_| {
             serde::de::Error::invalid_type(serde::de::Unexpected::Str(a), &"f64 string")
         }),
+    }
+}
+
+/// String转换为f64，除了str -> f64, 还可同时处理f64 -> f64
+pub(crate) fn string_to_f64<'de, D>(deserializer: D) -> Result<f64, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Debug, Deserialize)]
+    #[serde(untagged)]
+    enum M<'a> {
+        F64(f64),
+        Str(&'a str),
+    }
+
+    match M::deserialize(deserializer)? {
+        M::F64(f) => Ok(f),
+        M::Str(s) => {
+            if s.is_empty() {
+                Ok(0.0)
+            } else {
+                s.parse::<f64>().map_err(|_| {
+                    serde::de::Error::invalid_type(serde::de::Unexpected::Str(s), &"f64 string")
+                })
+            }
+        }
     }
 }
 

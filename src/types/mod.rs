@@ -9,3 +9,4 @@ pub mod symbol_info;
 pub mod ticker;
 pub mod rate_limit;
 pub mod wallet;
+pub mod sub_account;
