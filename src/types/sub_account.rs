@@ -9,6 +9,13 @@ pub struct SubAccounts {
     sub_accounts: Vec<SubAccountInfo>,
 }
 
+impl SubAccounts {
+    /// 所有子账户
+    pub fn accounts(self) -> Vec<SubAccountInfo> {
+        self.sub_accounts
+    }
+}
+
 /// 子账户信息
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]

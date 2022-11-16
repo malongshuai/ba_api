@@ -32,15 +32,15 @@ pub struct DustBtcInfo {
 pub struct DustBtc {
     /// 全部资产等值BTC
     #[serde(deserialize_with = "string_to_f64")]
-    total_transfer_btc: f64,
+    pub total_transfer_btc: f64,
     /// 总共可以转换的BNB数量
     #[serde(rename = "totalTransferBNB", deserialize_with = "string_to_f64")]
-    total_transfer_bnb: f64,
+    pub total_transfer_bnb: f64,
     /// 转换手续费
     #[serde(rename = "dribbletPercentage", deserialize_with = "string_to_f64")]
-    transfer_fee: f64,
+    pub transfer_fee: f64,
     /// 列表信息
-    details: Vec<DustBtcInfo>,
+    pub details: Vec<DustBtcInfo>,
 }
 
 /// 小额资产转换为bnb的转换结果信息
@@ -52,6 +52,8 @@ pub struct TransferInfo {
     pub from_asset: String,
     pub operate_time: u64,
     pub tran_id: u64,
+    #[serde(deserialize_with = "string_to_f64")]
+    pub service_charge_amount: f64,
     #[serde(deserialize_with = "string_to_f64")]
     pub transfered_amount: f64,
 }

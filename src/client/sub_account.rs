@@ -12,7 +12,7 @@ use crate::{
 
 /// 字母账户相关接口
 impl RestConn {
-    /// 可进行小额资产转换的币种和数量
+    /// 列出某个或所有子账户信息
     #[instrument(skip(self))]
     pub async fn sub_account_list(
         &self,
@@ -70,7 +70,6 @@ impl RestConn {
             symbol,
         )?;
         let res = self.rest_req("post", path, params, Some(1)).await?;
-        tracing::info!("{}", res);
         let res = serde_json::from_str::<UniversalTransfer>(&res)?;
         Ok(res)
     }

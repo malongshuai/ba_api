@@ -3,7 +3,7 @@ use crate::{
     types::order::{OrderRespType, OrderSide, OrderType, TimeInForce},
     KLineInterval, SubAccountType,
 };
-use serde::{ser::SerializeStruct, Deserialize, Serialize};
+use serde::{ser::SerializeStruct, Serialize};
 
 /// 将Symbol列表转换为URL参数字符串
 /// 例如，将["BTCUSDT", "ETHUSDT"]转换为字符串：'["BTCUSDT","ETHUSDT"]'
@@ -423,7 +423,6 @@ pub struct POrder {
     iceberg_qty: Option<f64>,
     new_order_resp_type: Option<OrderRespType>,
 }
-
 impl POrder {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
@@ -503,7 +502,6 @@ impl POrder {
         })
     }
 }
-
 impl Param for POrder {
     fn check_type(&self) -> CheckType {
         CheckType::Trade
@@ -618,7 +616,7 @@ impl Param for PGetOpenOrders {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PAllOrders {
     symbol: String,
@@ -659,7 +657,7 @@ impl Param for PAccount {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PMyTrades {
     symbol: String,
@@ -694,7 +692,7 @@ impl Param for PMyTrades {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize)]
 pub struct PRateLimitInfo;
 impl Param for PRateLimitInfo {
     fn check_type(&self) -> CheckType {
@@ -702,7 +700,7 @@ impl Param for PRateLimitInfo {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PListenKey {
     listen_key: Option<String>,
@@ -722,7 +720,7 @@ impl Param for PListenKey {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PDustBtc;
 impl Param for PDustBtc {
@@ -734,16 +732,34 @@ impl Param for PDustBtc {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug)]
 pub struct PDust {
-    asset: String,
+    /// 参数格式 asset=BTC&asset=USDT&asset=ETH
+    asset: Vec<String>,
 }
-impl PDust {
-    pub fn new(asset: &str) -> Self {
-        Self {
-            asset: asset.to_uppercase(),
+
+impl Serialize for PDust {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut ser = serializer.serialize_struct("PDust", self.asset.len())?;
+        for asset in &self.asset {
+            ser.serialize_field("asset", asset)?;
         }
+        ser.end()
+    }
+}
+
+impl PDust {
+    /// 参数格式 asset=BTC&asset=USDT&asset=ETH
+    pub fn new(assets: &[&str]) -> Self {
+        let mut s = Vec::new();
+        for asset in assets {
+            let asset = asset.to_uppercase();
+            s.push(asset);
+        }
+        Self { asset: s }
     }
 }
 impl Param for PDust {
@@ -755,7 +771,7 @@ impl Param for PDust {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PSubAccountList<'a> {
     email: Option<&'a str>,
@@ -776,8 +792,7 @@ impl Param for PSubAccountList<'_> {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Serialize)]
 pub struct PSubAccountAssets<'a> {
     email: &'a str,
 }
@@ -796,7 +811,7 @@ impl Param for PSubAccountAssets<'_> {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PSubAccountUniversalTransfer<'a> {
     from_email: Option<&'a str>,

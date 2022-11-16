@@ -23,9 +23,9 @@ impl RestConn {
 
     /// 小额资产转换，每6小时转换一次
     #[instrument(skip(self))]
-    pub async fn dust(&self, asset: &str) -> BiAnResult<Dust> {
+    pub async fn dust(&self, assets: &[&str]) -> BiAnResult<Dust> {
         let path = "/sapi/v1/asset/dust";
-        let params = PDust::new(asset);
+        let params = PDust::new(assets);
         let res = self.rest_req("post", path, params, Some(10)).await?;
         let dust_info = serde_json::from_str::<Dust>(&res)?;
         Ok(dust_info)
