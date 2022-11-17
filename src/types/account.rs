@@ -199,7 +199,7 @@ struct WebSocketBalance {
 }
 
 /// 账户信息
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Account {
     /// maker手续费，10表示0.1%(10 * 0.0001)
@@ -229,7 +229,7 @@ pub struct Account {
     pub permissions: Vec<Permission>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ListenKey {
     #[serde(default)]

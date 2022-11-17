@@ -1,13 +1,13 @@
 use crate::client::string_to_f64;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ServerTime {
     pub server_time: u64,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize)]
 pub struct AvgPrice {
     pub mins: u64,
     #[serde(deserialize_with = "string_to_f64")]
@@ -15,7 +15,7 @@ pub struct AvgPrice {
 }
 
 /// 最新价格
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize)]
 #[serde(untagged)]
 pub enum Prices {
     Price(Price),
@@ -23,10 +23,9 @@ pub enum Prices {
 }
 
 /// 最新价格
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize)]
 pub struct Price {
     pub symbol: String,
     #[serde(deserialize_with = "string_to_f64")]
     pub price: f64,
 }
-

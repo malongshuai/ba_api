@@ -1,8 +1,8 @@
 use crate::client::string_to_f64;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 /// 某币对btc和对bnb的等值关系
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DustBtcInfo {
     /// 资产名
@@ -27,7 +27,7 @@ pub struct DustBtcInfo {
 }
 
 /// 所有小额资产对btc和对bnb的等值关系
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DustBtc {
     /// 全部资产等值BTC
@@ -44,7 +44,7 @@ pub struct DustBtc {
 }
 
 /// 小额资产转换为bnb的转换结果信息
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TransferInfo {
     #[serde(deserialize_with = "string_to_f64")]
@@ -59,7 +59,7 @@ pub struct TransferInfo {
 }
 
 /// 小额资产转换为bnb的转换结果信息
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Dust {
     #[serde(deserialize_with = "string_to_f64")]

@@ -68,7 +68,7 @@ pub enum WebSocketAccount {
 }
 
 /// 订阅WebSocket时响应的数据类型
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Deserialize)]
 #[serde(untagged)]
 pub enum Response {
     /// 和账户有关的推送数据，包括余额更新、订单更新、资产更新，必须放在Trade字段的的前面
@@ -99,7 +99,7 @@ pub enum Response {
 }
 
 /// 订阅WebSocket组合流时响应的数据类型
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct WsResponse {
     pub stream: String,
     pub data: Response,

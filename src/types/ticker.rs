@@ -1,8 +1,8 @@
 use crate::client::string_to_f64;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 /// 买盘卖盘信息(最高买单信息和最低卖单信息)
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize)]
 #[serde(untagged)]
 pub enum BookTickers {
     BookTicker(BookTicker),
@@ -10,7 +10,7 @@ pub enum BookTickers {
 }
 
 /// 买盘卖盘信息(最高买单信息和最低卖单信息)
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize)]
 #[serde(from = "WrapBookTicker")]
 pub struct BookTicker {
     pub symbol: String,
@@ -45,14 +45,14 @@ impl From<WrapBookTicker> for BookTicker {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize)]
 #[serde(untagged)]
 enum WrapBookTicker {
     RestBookTicker(RestBookTicker),
     WebSocketBookTicker(WebSocketBookTicker),
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct RestBookTicker {
     symbol: String,
@@ -71,7 +71,7 @@ struct RestBookTicker {
     ask_qty: f64,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize)]
 struct WebSocketBookTicker {
     #[serde(rename = "s")]
     symbol: String,
@@ -95,7 +95,7 @@ struct WebSocketBookTicker {
 }
 
 /// 24小时内价格变动信息(可能是单个元素，可能是Vec容器)
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize)]
 #[serde(untagged)]
 pub enum FullTickers {
     Hr24FullTicker(FullTicker),
@@ -103,7 +103,7 @@ pub enum FullTickers {
 }
 
 /// 24小时内价格变动信息
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize)]
 #[serde(from = "WrapFullTicker")]
 pub struct FullTicker {
     /// 交易对
@@ -202,7 +202,7 @@ impl From<WrapFullTicker> for FullTicker {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize)]
 #[serde(untagged)]
 enum WrapFullTicker {
     RestFullTicker(RestFullHr24),
@@ -210,7 +210,7 @@ enum WrapFullTicker {
 }
 
 /// 24小时内价格变动信息(Rest接口)
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct RestFullHr24 {
     /// 交易对
@@ -292,7 +292,7 @@ struct RestFullHr24 {
 }
 
 /// 24小时内价格变动信息(WebSocket接口)
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize)]
 struct WebSocketFullTicker {
     /// 交易对
     #[serde(rename = "s")]
@@ -394,7 +394,7 @@ struct WebSocketFullTicker {
 }
 
 /// 按Symbol或全市场的精简Ticker(可能是单个元素，可能是Vec容器)
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize)]
 #[serde(untagged)]
 pub enum MiniTickers {
     MiniTicker(MiniTicker),
@@ -402,7 +402,7 @@ pub enum MiniTickers {
 }
 
 /// 按Symbol或全市场的精简Ticker
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct MiniTicker {
     /// 交易对
     #[serde(rename = "s")]
