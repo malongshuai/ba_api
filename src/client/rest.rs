@@ -52,7 +52,7 @@ mod helper {
 /// assert_eq!(RestMethod::from_str('get'), RestMethod::Get);
 /// assert_eq!(RestMethod::from_str('GET'), RestMethod::Get);
 /// ```
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum RestMethod {
     Get,
     Post,

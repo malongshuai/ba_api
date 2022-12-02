@@ -4,7 +4,7 @@ use crate::client::string_to_f64;
 use serde::{Deserialize, Deserializer, Serialize};
 
 /// 交易权限
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum Permission {
     Spot,
