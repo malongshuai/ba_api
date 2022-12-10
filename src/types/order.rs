@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fmt::Display;
 
 use crate::client::option_string_to_f64;
@@ -223,6 +224,8 @@ struct RestTrade {
     is_buyer_maker: bool,
     /// 是否是最优匹配，忽略该字段
     is_best_match: bool,
+    #[serde(flatten)]
+    pub extra: HashMap<String, serde_json::Value>,
 }
 
 /// 逐笔交易(WebSocket接口)
@@ -249,6 +252,8 @@ struct WebSocketTrade {
     /// 是否是最优匹配，忽略该字段
     #[serde(rename = "M")]
     is_best_match: bool,
+    #[serde(flatten)]
+    pub extra: HashMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -264,6 +269,8 @@ pub struct HistoricalTrade {
     pub time: u64,
     pub is_buyer_maker: bool,
     pub is_best_match: bool,
+    #[serde(flatten)]
+    pub extra: HashMap<String, serde_json::Value>,
 }
 
 /// 归集订单数据
@@ -307,6 +314,8 @@ pub struct AggTrade {
     /// 是否为最优撮合单(可忽略，目前总是为最优撮合)
     #[serde(rename = "M")]
     pub is_best_match: bool,
+    #[serde(flatten)]
+    pub extra: HashMap<String, serde_json::Value>,
 }
 
 /// 订单的交易信息
@@ -327,6 +336,12 @@ pub struct TradeInfo {
 
     /// 手续费的币种
     pub commission_asset: String,
+
+    /// 交易ID
+    #[serde(default)]
+    pub trade_id: u64,
+    #[serde(flatten)]
+    pub extra: HashMap<String, serde_json::Value>,
 }
 
 /// ACK方式的订单响应
@@ -338,6 +353,8 @@ pub struct RespAck {
     pub order_list_id: i64, // OCO订单ID，否则为 -1
     pub client_order_id: String,
     pub transact_time: u64,
+    #[serde(flatten)]
+    pub extra: HashMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -359,6 +376,8 @@ pub struct RespResult {
     pub time_in_force: TimeInForce,
     pub r#type: OrderType,
     pub side: OrderSide,
+    #[serde(flatten)]
+    pub extra: HashMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -428,6 +447,9 @@ pub struct CancelOrderInfo {
     #[serde(default)]
     #[serde(deserialize_with = "option_string_to_f64")]
     pub iceberg_qty: Option<f64>,
+
+    #[serde(flatten)]
+    pub extra: HashMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -451,6 +473,8 @@ pub struct CancelOCOOrderInfo {
     pub symbol: String,
     pub orders: Vec<OrderIdInfo>,
     pub order_reports: Vec<CancelOrderInfo>,
+    #[serde(flatten)]
+    pub extra: HashMap<String, serde_json::Value>,
 }
 
 /// 订单撤单后的信息，包含：普通订单取消的信息和OCO订单取消的信息
@@ -506,6 +530,8 @@ pub struct OrderInfo {
     pub orig_quote_order_qty: f64,
     /// 订单是否出现在orderbook中
     pub is_working: bool,
+    #[serde(flatten)]
+    pub extra: HashMap<String, serde_json::Value>,
 }
 
 /// 账户成交历史
@@ -538,6 +564,8 @@ pub struct MyTrades {
     pub is_maker: bool,
     /// 是否是最优挂单
     pub is_best_match: bool,
+    #[serde(flatten)]
+    pub extra: HashMap<String, serde_json::Value>,
 }
 
 /// 订单更新信息(来自WebSocket的推送)
@@ -777,6 +805,9 @@ struct WebSocketOrderUpdate {
     last_vol: f64,
     #[serde(rename(deserialize = "Q"), deserialize_with = "string_to_f64")]
     quote_order_qty: f64,
+    #[serde(flatten)]
+    #[allow(dead_code)]
+    extra: HashMap<String, serde_json::Value>,
 }
 
 #[cfg(test)]

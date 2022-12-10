@@ -198,6 +198,22 @@ struct WebSocketBalance {
     locked: f64,
 }
 
+/// "maker": "0.00150000",
+/// "taker": "0.00150000",
+/// "buyer": "0.00000000",
+/// "seller": "0.00000000"
+#[derive(Debug, Default, Deserialize)]
+pub struct FeeInfo {
+    #[serde(deserialize_with = "string_to_f64")]
+    pub maker: f64,
+    #[serde(deserialize_with = "string_to_f64")]
+    pub taker: f64,
+    #[serde(deserialize_with = "string_to_f64")]
+    pub buyer: f64,
+    #[serde(deserialize_with = "string_to_f64")]
+    pub seller: f64,
+}
+
 /// 账户信息
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -215,12 +231,20 @@ pub struct Account {
     #[serde(rename = "sellerCommission")]
     pub seller_fee: u16,
 
+    /// 将上面四种手续费转换成浮点数方式表示
+    #[serde(rename = "commissionRates")]
+    #[serde(default)]
+    pub fees: FeeInfo,
+
     /// 能否交易
     pub can_trade: bool,
     /// 能否提现
     pub can_withdraw: bool,
     /// 能否充值
     pub can_deposit: bool,
+    pub brokered: bool,
+    #[serde(default)]
+    pub require_self_trade_prevention: bool,
     pub update_time: u64,
     pub account_type: AccountType,
     /// 余额信息
