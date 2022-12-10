@@ -133,7 +133,9 @@ pub struct SymbolInfo {
     pub iceberg_allowed: bool,
     pub oco_allowed: bool,
     pub quote_order_qty_market_allowed: bool,
+    #[serde(default)]
     pub is_spot_trading_allowed: bool,
+    #[serde(default)]
     pub is_margin_trading_allowed: bool,
     pub filters: Vec<SymbolFilter>,
     /// 未来会替代is_(spot|margin)_trading_allowed字段
