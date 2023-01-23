@@ -103,9 +103,9 @@ impl WS {
                     error!("Data Receiver already closed");
                 }
             }
-            Message::Ping(_) => {
+            Message::Ping(d) => {
                 debug!("received Ping Frame");
-                let pong = Message::Pong(vec![]);
+                let pong = Message::Pong(d);
                 if let Err(e) = self.conn_stream.send(pong).await {
                     error!("websocket closed: {}", e);
                 }

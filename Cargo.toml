@@ -5,10 +5,18 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+websocket = []
+
 [dependencies]
+# ba_spot_types = { path = "../ba_spot_types" }
+ba_types = { path = "../../ba_types", features = [
+  "spot",
+  "datetime",
+], default-features = false }
 reqwest = { version = "0.11", features = ["json", "socks"] }
 ring = { version = "0.16" }
-tokio = { version = "1.21", features = ["net", "macros", "fs"] }
+tokio = { version = "1.21", features = ["net", "fs", "macros"] }
 tokio-tungstenite = { version = "0.16", features = ["native-tls"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -17,12 +25,13 @@ thiserror = "1.0"
 tracing = "0.1"
 serde_urlencoded = "0.7"
 futures-util = "0.3"
-chrono = "=0.4.22"
+chrono = "0.4"
 
 [dev-dependencies]
-tokio = { version = "1.21", features = ["full", "tracing"] }
+tokio = { version = "1.21", features = ["full"] }
 tracing-subscriber = "0.3"
 dashmap = "5.4"
+
 
 [lib]
 doctest = false

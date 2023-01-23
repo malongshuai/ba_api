@@ -1,4 +1,5 @@
 use ba_api::client::RestConn;
+// 需开启 websocket features
 use ba_api::client::WsClient;
 use ba_api::WsResponse;
 use std::time::Duration;
@@ -6,9 +7,13 @@ use tokio::sync::mpsc;
 use tracing::debug;
 use tracing::info;
 
-// 替换为你自己的API KEY和Secret Key
-const API_KEY: &str = "abcdefdjklfasjfklasdjflas";
-const SEC_KEY: &str = "Mfnasldfjaklsjdfhsakjdfha";
+fn api_key() -> Option<String> {
+    std::env::var("BA_API_KEY").ok()
+}
+
+fn sec_key() -> Option<String> {
+    std::env::var("BA_SEC_KEY").ok()
+}
 
 #[tokio::main]
 async fn main() {
@@ -22,7 +27,7 @@ async fn main() {
 #[allow(dead_code)]
 async fn websocket() {
     // 创建http连接
-    let rest_conn = RestConn::new(API_KEY.to_string(), SEC_KEY.to_string(), None).await;
+    let rest_conn = RestConn::new(api_key().unwrap(), sec_key().unwrap(), None).await;
 
     // 生成一个ListenKey以便使用websocket订阅账户更新信息
     let listen_key = rest_conn.new_spot_listen_key().await.unwrap();
