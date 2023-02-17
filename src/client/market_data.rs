@@ -1,3 +1,5 @@
+use crate::app_dir;
+
 use {
     super::{
         params::{
@@ -13,7 +15,7 @@ use {
     crate::types::symbol_info::ExchangeInfo,
     crate::types::ticker::{BookTickers, FullTickers},
     crate::{KLineInterval, KLines},
-    std::{env, error, path::Path, time::SystemTime},
+    std::{error, path::Path, time::SystemTime},
     tokio::{fs, io::AsyncReadExt},
     tracing::instrument,
 };
@@ -69,7 +71,7 @@ impl RestConn {
         let params = PExchangeInfo::new(symbols);
 
         // 如果本地文件已有exchange_info的信息，且文件的mtime在半小时以内，则从本地文件读取数据并返回，否则请求新数据并写入本地文件
-        let bian_dir = env::temp_dir().join("bian");
+        let bian_dir = app_dir().unwrap().join("bian");
         let exchange_info_file = bian_dir.join("exchange_info.json");
         let c_res = fs::create_dir_all(&bian_dir).await;
         if c_res.is_ok() {

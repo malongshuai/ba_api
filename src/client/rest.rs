@@ -81,7 +81,7 @@ impl FromStr for RestMethod {
 
 #[allow(dead_code)]
 /// 已建立好的Http连接客户端(reqwest::Client)
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct RestConn {
     conn: reqwest::Client,
     api_key: Arc<String>,
