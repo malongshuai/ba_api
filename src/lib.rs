@@ -3,7 +3,7 @@ pub mod errors;
 pub mod misc;
 
 pub use ba_types::*;
-pub use misc::check_coin_warning;
+pub use misc::*;
 
 /// Rest接口的BASE URL
 pub const REST_BASE_URL: &str = "https://api.binance.com";

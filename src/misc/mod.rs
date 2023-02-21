@@ -3,7 +3,7 @@
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::collections::HashMap;
-use tracing::warn;
+use tracing::{info, warn};
 
 use crate::errors::BiAnResult;
 
@@ -47,6 +47,8 @@ pub async fn check_coin_warning(sym: &str) -> BiAnResult<Option<String>> {
         .json::<WarnInfo>()
         .await?;
 
+    info!("check coin warning: {:?}", res);
+
     if res.data.is_some() {
         Ok(res.data.unwrap().content)
     } else if !res.success {
@@ -55,4 +57,57 @@ pub async fn check_coin_warning(sym: &str) -> BiAnResult<Option<String>> {
     } else {
         Ok(None)
     }
+}
+
+/// 如果确实要下架，下架信息存放在data字段(OfflineMessage类型)中
+#[derive(Debug, Deserialize)]
+struct OfflineInfo {
+    code: String,
+    success: bool,
+    message: Option<String>,
+    messageDetail: Option<String>,
+    data: Option<OfflineMessage>,
+    #[serde(flatten)]
+    extra: HashMap<String, Value>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OfflineMessage {
+    /// 是否将要下架
+    pom: bool,
+    /// 将要下架的时间(毫秒Epoch)
+    pomt: u64,
+    #[serde(flatten)]
+    extra: HashMap<String, Value>,
+}
+
+/// 检查该交易对是否将要下架(根据警告信息检查).
+/// sym忽略大小写，例如:
+///
+/// ```text
+/// check_offline("btcusdt")
+/// check_offline("Btcbusd")
+/// ```
+///
+/// 如果确实要下架，返回Ok(Some(Epoch))，Epoch是毫秒级，表示下架时间点。
+/// 返回Err表示请求错误，返回Ok(None)表示不下架或请求的交易对名称不对
+pub async fn check_offline(sym: &str) -> BiAnResult<Option<u64>> {
+    let sym = sym.to_uppercase();
+    let base_url =
+        "https://www.binance.com/bapi/asset/v2/public/asset-service/product/get-product-by-symbol";
+
+    let url = format!("{}?symbol={}", base_url, sym);
+
+    let client = reqwest::Client::new();
+    let res = client.get(url).send().await?.json::<OfflineInfo>().await?;
+    info!("check offline: {:?}", res);
+
+    if res.data.is_some() {
+        if let Some(off_msg) = res.data {
+            if off_msg.pom {
+                return Ok(Some(off_msg.pomt));
+            }
+        }
+    }
+    Ok(None)
 }
