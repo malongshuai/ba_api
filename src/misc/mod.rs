@@ -76,7 +76,7 @@ struct OfflineMessage {
     /// 是否将要下架
     pom: bool,
     /// 将要下架的时间(毫秒Epoch)
-    pomt: u64,
+    pomt: Option<u64>,
     #[serde(flatten)]
     extra: HashMap<String, Value>,
 }
@@ -105,7 +105,7 @@ pub async fn check_offline(sym: &str) -> BiAnResult<Option<u64>> {
     if res.data.is_some() {
         if let Some(off_msg) = res.data {
             if off_msg.pom {
-                return Ok(Some(off_msg.pomt));
+                return Ok(off_msg.pomt);
             }
         }
     }
