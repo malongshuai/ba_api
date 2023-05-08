@@ -415,12 +415,12 @@ pub struct POrder {
     order_type: OrderType,
     time_in_force: Option<TimeInForce>,
     #[serde(rename = "quantity")]
-    qty: Option<f64>,
-    quote_order_qty: Option<f64>,
-    price: Option<f64>,
+    qty: Option<String>,
+    quote_order_qty: Option<String>,
+    price: Option<String>,
     new_client_order_id: Option<String>,
-    stop_price: Option<f64>,
-    iceberg_qty: Option<f64>,
+    stop_price: Option<String>,
+    iceberg_qty: Option<String>,
     new_order_resp_type: Option<OrderRespType>,
 }
 impl POrder {
@@ -492,12 +492,12 @@ impl POrder {
             side,
             order_type: ot,
             time_in_force: tif,
-            qty,
-            quote_order_qty,
-            price,
+            qty: qty.map(|x| format!("{}", x)),
+            quote_order_qty: quote_order_qty.map(|x| format!("{}", x)),
+            price: price.map(|x| format!("{}", x)),
             new_client_order_id,
-            stop_price,
-            iceberg_qty,
+            stop_price: stop_price.map(|x| format!("{}", x)),
+            iceberg_qty: iceberg_qty.map(|x| format!("{}", x)),
             new_order_resp_type: new_order_resp_type.map(OrderRespType::from),
         })
     }

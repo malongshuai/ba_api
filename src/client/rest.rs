@@ -10,7 +10,10 @@ use std::{fmt::Debug, str::FromStr, sync::Arc, time::Duration};
 use tokio::time;
 use tracing::{error, warn};
 
-use super::{params::{CheckType, Param}, rate_limit::APIRateLimit};
+use super::{
+    params::{CheckType, Param},
+    rate_limit::APIRateLimit,
+};
 
 /// REST响应体
 pub(crate) type RespBody = String;

@@ -1,4 +1,4 @@
-use ba_api::client::RestConn;
+use ba_api::{check_offline, client::RestConn};
 use tracing::debug;
 
 fn api_key() -> Option<String> {
