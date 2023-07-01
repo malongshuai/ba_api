@@ -93,7 +93,7 @@ impl<'a> Serialize for PExchangeInfo<'a> {
                 for e in &data[0..(data.len() - 1)] {
                     str.push_str(format!(r#""{}","#, e).as_str());
                 }
-                str.push_str(format!(r#""{}"]"#, data[(data.len() - 1)]).as_str());
+                str.push_str(format!(r#""{}"]"#, data[data.len() - 1]).as_str());
                 s.serialize_field("symbols", &str)?;
                 s.end()
             }

@@ -1,5 +1,9 @@
 use std::{sync::Arc, time::Duration};
 
+use crate::{
+    errors::{BiAnApiError, BiAnResult},
+    KLineInterval, WS_BASE_URL,
+};
 use futures_util::{SinkExt, StreamExt};
 use tokio::{
     net::TcpStream,
@@ -14,11 +18,6 @@ use tokio_tungstenite::{
     MaybeTlsStream, WebSocketStream,
 };
 use tracing::{debug, error, warn};
-
-use crate::{
-    errors::{BiAnApiError, BiAnResult},
-    KLineInterval, WS_BASE_URL,
-};
 
 type WsStream = WebSocketStream<MaybeTlsStream<TcpStream>>;
 
@@ -225,7 +224,7 @@ impl WsClient {
                             ws.handle_msg(msg, data_sender.clone()).await;
                         }
                         Err(e) => {
-                            warn!("ws closed: {}, {}", ws.url, e);
+                            warn!("ws closed({}): {}, {}", ws.channel, ws.url, e);
                             ws.replace_inner_stream().await;
                         }
                     }
