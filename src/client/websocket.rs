@@ -1,10 +1,10 @@
-use std::{sync::Arc, time::Duration};
-
 use crate::{
     errors::{BiAnApiError, BiAnResult},
     KLineInterval, WS_BASE_URL,
 };
+use dashmap::DashMap;
 use futures_util::{SinkExt, StreamExt};
+use std::{sync::Arc, time::Duration};
 use tokio::{
     net::TcpStream,
     sync::{mpsc, RwLock},
@@ -106,12 +106,13 @@ impl WS {
                 debug!("received Ping Frame");
                 let pong = Message::Pong(d);
                 if let Err(e) = self.conn_stream.send(pong).await {
-                    error!("websocket closed: {}", e);
+                    error!("websocket({}) closed: {}", self.channel, e);
                 }
             }
             Message::Close(Some(data)) => {
-                debug!(
-                    "close reason: <{}>, <{}>",
+                warn!(
+                    "websocket({}) close reason: <{}>, <{}>",
+                    self.channel,
                     data.reason,
                     self.names.join(",")
                 );
@@ -147,7 +148,7 @@ impl WS {
 #[derive(Debug, Clone)]
 #[must_use = "`WsClient` must be use"]
 pub struct WsClient {
-    pub ws: Arc<RwLock<WS>>,
+    pub ws: Arc<DashMap<(), WS>>,
     close_sender: Arc<RwLock<mpsc::Sender<bool>>>,
     close_receiver: Arc<RwLock<mpsc::Receiver<bool>>>,
 }
@@ -157,8 +158,10 @@ impl WsClient {
     pub async fn new(channel: &str, names: Vec<String>) -> BiAnResult<Self> {
         let ws = WS::new(channel, names).await?;
         let (close_sender, close_receiver) = mpsc::channel::<bool>(1);
+        let map = DashMap::new();
+        map.insert((), ws);
         Ok(Self {
-            ws: Arc::new(RwLock::new(ws)),
+            ws: Arc::new(map),
             close_receiver: Arc::new(RwLock::new(close_receiver)),
             close_sender: Arc::new(RwLock::new(close_sender)),
         })
@@ -217,7 +220,7 @@ impl WsClient {
                 if data_sender.is_closed() {
                     break;
                 }
-                let mut ws = ws_self.ws.write().await;
+                let mut ws = ws_self.ws.get_mut(&()).unwrap();
                 if let Some(msg) = ws.conn_stream.next().await {
                     match msg {
                         Ok(msg) => {
@@ -236,7 +239,7 @@ impl WsClient {
             loop {
                 match ws_self.close_receiver.write().await.recv().await {
                     Some(data) => {
-                        let mut ws = ws_self.ws.write().await;
+                        let mut ws = ws_self.ws.get_mut(&()).unwrap();
                         if let Err(e) = ws.close_stream().await {
                             error!("close stream error: {}", e);
                             break;

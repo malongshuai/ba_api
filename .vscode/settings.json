@@ -1,0 +1,9 @@
+{
+  "rust-analyzer.check.features": [
+    "websocket"
+  ],
+  "rust-analyzer.showUnlinkedFileNotification": false,
+  "rust-analyzer.cargo.features": [
+    "websocket"
+  ]
+}

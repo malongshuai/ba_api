@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-# defualt = ["websocket"]
+defualt = ["websocket"]
 websocket = []
 
 [dependencies]
@@ -26,6 +26,7 @@ tracing = "0.1"
 serde_urlencoded = "0.7"
 futures-util = "0.3"
 chrono = "0.4"
+dashmap = "5.4"
 
 [dev-dependencies]
 tokio = { version = "1.21", features = ["full"] }
@@ -35,3 +36,9 @@ dashmap = "5.4"
 
 [lib]
 doctest = false
+
+
+[profile.release]
+lto = true
+strip = true
+codegen-units = 1
