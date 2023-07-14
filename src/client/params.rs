@@ -215,11 +215,7 @@ impl PHistoricalTrades<'_> {
         })
     }
 }
-impl Param for PHistoricalTrades<'_> {
-    fn check_type(&self) -> CheckType {
-        CheckType::MarketData
-    }
-}
+impl Param for PHistoricalTrades<'_> {}
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
