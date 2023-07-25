@@ -2,7 +2,6 @@ use crate::{
     errors::{BiAnApiError, BiAnResult},
     KLineInterval, WS_BASE_URL,
 };
-use dashmap::DashMap;
 use futures_util::{SinkExt, StreamExt};
 use std::{sync::Arc, time::Duration};
 use tokio::{
@@ -104,10 +103,7 @@ impl WS {
             }
             Message::Ping(d) => {
                 debug!("received Ping Frame");
-                let pong = Message::Pong(d);
-                if let Err(e) = self.conn_stream.send(pong).await {
-                    error!("websocket({}) closed: {}", self.channel, e);
-                }
+                self.send_msg(Message::Pong(d)).await;
             }
             Message::Close(Some(data)) => {
                 warn!(
@@ -120,6 +116,24 @@ impl WS {
             }
             _ => (),
         }
+    }
+
+    /// 向订阅通道发送数据
+    async fn send_msg(&mut self, msg: Message) {
+        if let Err(e) = self.conn_stream.send(msg).await {
+            error!("websocket({}) closed: {}", self.channel, e);
+        }
+    }
+    /// 列出订阅内容，可用于检查是否订阅成功
+    /// 向通道发送信息，查看订阅结果，通道会响应id和result字段
+    /// id参数随意，响应中的id字段总是和该给定的id相同
+    async fn list_sub(&mut self, id: u64) {
+        let json_text = serde_json::json!({
+          "method": "LIST_SUBSCRIPTIONS",
+          "id": id
+        });
+        let msg = Message::Text(json_text.to_string());
+        self.send_msg(msg).await;
     }
 }
 
@@ -148,7 +162,9 @@ impl WS {
 #[derive(Debug, Clone)]
 #[must_use = "`WsClient` must be use"]
 pub struct WsClient {
-    pub ws: Arc<DashMap<(), WS>>,
+    // 不使用DashMap，因为它在重复get_mut时，不会释放锁
+    // pub ws: Arc<DashMap<(), WS>>,
+    pub ws: Arc<RwLock<WS>>,
     close_sender: Arc<RwLock<mpsc::Sender<bool>>>,
     close_receiver: Arc<RwLock<mpsc::Receiver<bool>>>,
 }
@@ -158,13 +174,23 @@ impl WsClient {
     pub async fn new(channel: &str, names: Vec<String>) -> BiAnResult<Self> {
         let ws = WS::new(channel, names).await?;
         let (close_sender, close_receiver) = mpsc::channel::<bool>(1);
-        let map = DashMap::new();
-        map.insert((), ws);
+        // let map = DashMap::new();
+        // map.insert((), ws);
         Ok(Self {
-            ws: Arc::new(map),
+            // ws: Arc::new(map),
+            ws: Arc::new(RwLock::new(ws)),
             close_receiver: Arc::new(RwLock::new(close_receiver)),
             close_sender: Arc::new(RwLock::new(close_sender)),
         })
+    }
+
+    /// 列出订阅内容，可用于检查是否订阅成功.
+    /// 向通道发送信息，查看订阅结果，通道会响应id和result字段
+    /// id参数随意，响应中的id字段总是和该给定的id相同
+    pub async fn list_sub(&self, id: u64) {
+        // let mut ws = self.ws.get_mut(&()).unwrap();
+        let mut ws = self.ws.write().await;
+        ws.list_sub(id).await;
     }
 
     /// 获取
@@ -220,7 +246,8 @@ impl WsClient {
                 if data_sender.is_closed() {
                     break;
                 }
-                let mut ws = ws_self.ws.get_mut(&()).unwrap();
+                // let mut ws = ws_self.ws.get_mut(&()).unwrap();
+                let mut ws = ws_self.ws.write().await;
                 if let Some(msg) = ws.conn_stream.next().await {
                     match msg {
                         Ok(msg) => {
@@ -239,7 +266,8 @@ impl WsClient {
             loop {
                 match ws_self.close_receiver.write().await.recv().await {
                     Some(data) => {
-                        let mut ws = ws_self.ws.get_mut(&()).unwrap();
+                        // let mut ws = ws_self.ws.get_mut(&()).unwrap();
+                        let mut ws = ws_self.ws.write().await;
                         if let Err(e) = ws.close_stream().await {
                             error!("close stream error: {}", e);
                             break;
