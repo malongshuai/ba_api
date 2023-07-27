@@ -19,11 +19,13 @@ fn sec_key() -> Option<String> {
 async fn main() {
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::INFO)
+        .with_file(true)
+        .with_line_number(true)
         .init();
 
     let ws_client = websocket().await;
     loop {
-        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+        tokio::time::sleep(tokio::time::Duration::from_secs(4)).await;
         ws_client.list_sub(1).await;
     }
 }
@@ -54,8 +56,8 @@ async fn websocket() -> WsClient {
 
     // 新生成一个任务使用close_sender来发送关闭websocket连接的通知，发送true表示强制关闭，不再自动重建连接，发送false表示关闭连接但会自动重连
     tokio::spawn(async move {
-        tokio::time::sleep(Duration::from_secs(600)).await;
-        WsClient::close_client(close_sender, true).await;
+        tokio::time::sleep(Duration::from_secs(10)).await;
+        WsClient::close_client(close_sender, false).await;
         debug!("send close");
     });
 
@@ -64,6 +66,7 @@ async fn websocket() -> WsClient {
 
     let wc = ws_client.clone();
     tokio::spawn(async move {
+        info!("subscribe account channel...");
         wc.sub_channel(data_sender).await.unwrap();
     });
 

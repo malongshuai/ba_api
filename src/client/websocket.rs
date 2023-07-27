@@ -2,7 +2,10 @@ use crate::{
     errors::{BiAnApiError, BiAnResult},
     KLineInterval, WS_BASE_URL,
 };
-use futures_util::{SinkExt, StreamExt};
+use futures_util::{
+    stream::{SplitSink, SplitStream},
+    SinkExt, StreamExt,
+};
 use std::{sync::Arc, time::Duration};
 use tokio::{
     net::TcpStream,
@@ -18,13 +21,15 @@ use tokio_tungstenite::{
 };
 use tracing::{debug, error, warn};
 
-type WsStream = WebSocketStream<MaybeTlsStream<TcpStream>>;
+type WsSink = SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>;
+type WsStream = SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>;
 
 /// 内部ws连接，只支持订阅组合Stream(参考<https://binance-docs.github.io/apidocs/spot/cn/#websocket>)
 #[derive(Debug)]
 pub struct WS {
     /// WebSocketStream
-    pub conn_stream: WsStream,
+    pub ws_writer: RwLock<WsSink>,
+    pub ws_reader: RwLock<WsStream>,
     /// 该ws订阅的频道
     pub names: Vec<String>,
     /// 该ws连接订阅的频道名称
@@ -60,9 +65,11 @@ impl WS {
         let url = Self::make_ws_url(channel, &names, base_url);
 
         let (ws_stream, _response) = connect_async(&url).await?;
+        let (ws_writer, ws_reader) = ws_stream.split();
 
         Ok(WS {
-            conn_stream: ws_stream,
+            ws_reader: RwLock::new(ws_reader),
+            ws_writer: RwLock::new(ws_writer),
             names,
             channel: channel.to_string(),
             url,
@@ -70,11 +77,13 @@ impl WS {
     }
 
     /// 创建一个新的WebSocketStream，并将其替换该ws连接内部已有的WebSocketStream  
-    pub async fn replace_inner_stream(&mut self) {
+    pub async fn replace_inner_stream(&self) {
         let dur = Duration::from_millis(500);
         loop {
             if let Ok((ws_stream, _response)) = connect_async(&self.url).await {
-                self.conn_stream = ws_stream;
+                let (ws_writer, ws_reader) = ws_stream.split();
+                *self.ws_reader.write().await = ws_reader;
+                *self.ws_writer.write().await = ws_writer;
                 warn!("build websocket stream success: {}", self.url);
                 break;
             }
@@ -84,17 +93,18 @@ impl WS {
     }
 
     /// 关闭ws conn_stream
-    async fn close_stream(&mut self) -> BiAnResult<()> {
+    async fn close_stream(&self) -> BiAnResult<()> {
         let close_frame = CloseFrame {
             code: CloseCode::Normal,
             reason: std::borrow::Cow::Borrowed("force close"),
         };
-        self.conn_stream.close(Some(close_frame)).await?;
+        let msg = Message::Close(Some(close_frame));
+        self.ws_writer.write().await.send(msg).await?;
         Ok(())
     }
 
     /// 处理ws接收到的信息，并且在接收到ws关闭信息的时候替换重建ws
-    async fn handle_msg(&mut self, msg: Message, data_sender: mpsc::Sender<String>) {
+    async fn handle_msg(&self, msg: Message, data_sender: mpsc::Sender<String>) {
         match msg {
             Message::Text(data) => {
                 if data_sender.send(data).await.is_err() {
@@ -103,7 +113,10 @@ impl WS {
             }
             Message::Ping(d) => {
                 debug!("received Ping Frame");
-                self.send_msg(Message::Pong(d)).await;
+                let msg = Message::Pong(d);
+                if let Err(e) = self.ws_writer.write().await.send(msg).await {
+                    error!("channel({}) closed: {}", self.channel, e);
+                }
             }
             Message::Close(Some(data)) => {
                 warn!(
@@ -118,22 +131,18 @@ impl WS {
         }
     }
 
-    /// 向订阅通道发送数据
-    async fn send_msg(&mut self, msg: Message) {
-        if let Err(e) = self.conn_stream.send(msg).await {
-            error!("websocket({}) closed: {}", self.channel, e);
-        }
-    }
     /// 列出订阅内容，可用于检查是否订阅成功
     /// 向通道发送信息，查看订阅结果，通道会响应id和result字段
-    /// id参数随意，响应中的id字段总是和该给定的id相同
-    async fn list_sub(&mut self, id: u64) {
+    /// id参数随意，响应中的id字段总是和该给定的id相同以示对应
+    async fn list_sub(&self, id: u64) {
         let json_text = serde_json::json!({
           "method": "LIST_SUBSCRIPTIONS",
           "id": id
         });
         let msg = Message::Text(json_text.to_string());
-        self.send_msg(msg).await;
+        if let Err(e) = self.ws_writer.write().await.send(msg).await {
+            error!("channel({}) closed: {}", self.channel, e);
+        }
     }
 }
 
@@ -162,9 +171,10 @@ impl WS {
 #[derive(Debug, Clone)]
 #[must_use = "`WsClient` must be use"]
 pub struct WsClient {
-    // 不使用DashMap，因为它在重复get_mut时，不会释放锁
+    // 不使用DashMap，因为它在不切换任务的过程中重复get_mut时，不会释放锁，
+    // 相邻两次之间必须至少有一个额外的异步任务才可以，比如`tokio::task::yield_now().await`
     // pub ws: Arc<DashMap<(), WS>>,
-    pub ws: Arc<RwLock<WS>>,
+    pub ws: Arc<WS>,
     close_sender: Arc<RwLock<mpsc::Sender<bool>>>,
     close_receiver: Arc<RwLock<mpsc::Receiver<bool>>>,
 }
@@ -174,11 +184,8 @@ impl WsClient {
     pub async fn new(channel: &str, names: Vec<String>) -> BiAnResult<Self> {
         let ws = WS::new(channel, names).await?;
         let (close_sender, close_receiver) = mpsc::channel::<bool>(1);
-        // let map = DashMap::new();
-        // map.insert((), ws);
         Ok(Self {
-            // ws: Arc::new(map),
-            ws: Arc::new(RwLock::new(ws)),
+            ws: Arc::new(ws),
             close_receiver: Arc::new(RwLock::new(close_receiver)),
             close_sender: Arc::new(RwLock::new(close_sender)),
         })
@@ -188,9 +195,7 @@ impl WsClient {
     /// 向通道发送信息，查看订阅结果，通道会响应id和result字段
     /// id参数随意，响应中的id字段总是和该给定的id相同
     pub async fn list_sub(&self, id: u64) {
-        // let mut ws = self.ws.get_mut(&()).unwrap();
-        let mut ws = self.ws.write().await;
-        ws.list_sub(id).await;
+        self.ws.list_sub(id).await;
     }
 
     /// 获取
@@ -246,9 +251,9 @@ impl WsClient {
                 if data_sender.is_closed() {
                     break;
                 }
-                // let mut ws = ws_self.ws.get_mut(&()).unwrap();
-                let mut ws = ws_self.ws.write().await;
-                if let Some(msg) = ws.conn_stream.next().await {
+                let ws = ws_self.ws.clone();
+                let msg = ws.ws_reader.write().await.next().await;
+                if let Some(msg) = msg {
                     match msg {
                         Ok(msg) => {
                             ws.handle_msg(msg, data_sender.clone()).await;
@@ -266,11 +271,9 @@ impl WsClient {
             loop {
                 match ws_self.close_receiver.write().await.recv().await {
                     Some(data) => {
-                        // let mut ws = ws_self.ws.get_mut(&()).unwrap();
-                        let mut ws = ws_self.ws.write().await;
-                        if let Err(e) = ws.close_stream().await {
+                        // 关闭失败不退出，因为连接可能会被重建
+                        if let Err(e) = ws_self.ws.close_stream().await {
                             error!("close stream error: {}", e);
-                            break;
                         }
                         if data {
                             break;
