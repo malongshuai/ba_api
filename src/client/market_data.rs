@@ -1,5 +1,4 @@
 use crate::app_dir;
-
 use {
     super::{
         params::{
@@ -80,7 +79,7 @@ impl RestConn {
             }
         }
 
-        let res = self.rest_req("get", path, params, Some(10)).await?;
+        let res = self.rest_req("get", path, params, Some(20)).await?;
         if c_res.is_ok() && fs::write(&exchange_info_file, res.as_bytes()).await.is_ok() {}
 
         let exchange_info = serde_json::from_str::<ExchangeInfo>(&res)?;
@@ -95,12 +94,13 @@ impl RestConn {
 
         let rate_limit = match limit {
             Some(n) => match n {
-                500 => 5,
-                1000 => 10,
-                5000 => 50,
-                _ => 1,
+                1..=100 => 2,
+                101..=500 => 10,
+                501..=1000 => 20,
+                1001..=5000 => 100,
+                _ => 100,
             },
-            None => 1,
+            None => 2,
         };
 
         let params = PDepth::new(symbol, limit)?;
@@ -114,7 +114,9 @@ impl RestConn {
     pub async fn trades(&self, symbol: &str, limit: Option<u16>) -> BiAnResult<Vec<Trade>> {
         let path = "/api/v3/trades";
         let params = PTrades::new(symbol, limit)?;
-        let res = self.rest_req("get", path, params, Some(1)).await?;
+        let res = self
+            .rest_req("get", path, params, Some(2))
+            .await?;
         let trades = serde_json::from_str::<Vec<Trade>>(&res)?;
         Ok(trades)
     }
@@ -129,7 +131,9 @@ impl RestConn {
     ) -> BiAnResult<Vec<HistoricalTrade>> {
         let path = "/api/v3/historicalTrades";
         let params = PHistoricalTrades::new(symbol, limit, from_id)?;
-        let res = self.rest_req("get", path, params, Some(5)).await?;
+        let res = self
+            .rest_req("get", path, params, Some(10))
+            .await?;
         let historical_trades = serde_json::from_str::<Vec<HistoricalTrade>>(&res)?;
         Ok(historical_trades)
     }
@@ -148,7 +152,9 @@ impl RestConn {
     ) -> BiAnResult<Vec<AggTrade>> {
         let path = "/api/v3/aggTrades";
         let params = PAggTrades::new(symbol, from_id, start_time, end_time, limit)?;
-        let res = self.rest_req("get", path, params, Some(1)).await?;
+        let res = self
+            .rest_req("get", path, params, Some(2))
+            .await?;
         let agg_trades = serde_json::from_str::<Vec<AggTrade>>(&res)?;
         Ok(agg_trades)
     }
@@ -177,7 +183,9 @@ impl RestConn {
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap()
             .as_millis();
-        let res = self.rest_req("get", path, params, Some(1)).await?;
+        let res = self
+            .rest_req("get", path, params, Some(2))
+            .await?;
         let now_af = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap()
@@ -205,7 +213,9 @@ impl RestConn {
     pub async fn avg_price(&self, symbol: &str) -> BiAnResult<AvgPrice> {
         let path = "/api/v3/avgPrice";
         let params = PAvgPrice::new(symbol);
-        let res = self.rest_req("get", path, params, Some(1)).await?;
+        let res = self
+            .rest_req("get", path, params, Some(2))
+            .await?;
         let avg_price = serde_json::from_str::<AvgPrice>(&res)?;
         Ok(avg_price)
     }
@@ -216,9 +226,9 @@ impl RestConn {
     pub async fn hr24(&self, symbols: Vec<&str>) -> BiAnResult<FullTickers> {
         let path = "/api/v3/ticker/24hr";
         let rate_limit = match &symbols.len() {
-            1..=20 => 1,
-            21..=100 => 20,
-            _ => 40,
+            1..=20 => 2,
+            21..=100 => 40,
+            _ => 80,
         };
         let params = PHr24::new(symbols);
         let res = self.rest_req("get", path, params, Some(rate_limit)).await?;
@@ -232,8 +242,8 @@ impl RestConn {
     pub async fn price(&self, symbols: Vec<&str>) -> BiAnResult<Prices> {
         let path = "/api/v3/ticker/price";
         let rate_limit = match symbols.len() {
-            1 => 1,
-            _ => 2,
+            1 => 2,
+            _ => 4,
         };
         let params = PPrice::new(symbols);
         let res = self.rest_req("get", path, params, Some(rate_limit)).await?;
@@ -247,8 +257,8 @@ impl RestConn {
     pub async fn book_ticker(&self, symbols: Vec<&str>) -> BiAnResult<BookTickers> {
         let path = "/api/v3/ticker/bookTicker";
         let rate_limit = match symbols.len() {
-            1 => 1,
-            _ => 2,
+            1 => 2,
+            _ => 4,
         };
         let params = PBookTicker::new(symbols);
         let res = self.rest_req("get", path, params, Some(rate_limit)).await?;

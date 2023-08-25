@@ -150,17 +150,6 @@ pub struct PDepth<'a> {
 }
 impl PDepth<'_> {
     pub fn new(symbol: &str, limit: Option<u16>) -> BiAnResult<PDepth> {
-        let x: [u16; 8] = [5, 10, 20, 50, 100, 500, 1000, 5000];
-
-        if let Some(n) = limit {
-            if !x.contains(&n) {
-                return Err(BiAnApiError::ArgumentError(format!(
-                    "invalid limit `{}', valid limit(5,10,20,50,100,500,1000,5000)",
-                    n
-                )));
-            }
-        }
-
         Ok(PDepth { symbol, limit })
     }
 }

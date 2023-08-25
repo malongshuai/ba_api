@@ -18,7 +18,7 @@ struct IPRateLimit {
 
 impl IPRateLimit {
     /// 最大权重1200
-    const MAX: usize = 1200;
+    const MAX: usize = 6000;
 
     fn reset(&mut self) {
         self.remain = Self::MAX;
@@ -56,7 +56,7 @@ impl Default for IPRateLimit {
     }
 }
 
-/// 秒级别的UID限速规则，每10秒最多只能下单50次
+/// 秒级别的UID限速规则，每10秒最多只能下单100次
 #[derive(Debug)]
 struct UIDRateLimitSecLevel {
     /// 本阶段剩余的数量
@@ -70,8 +70,8 @@ impl Default for UIDRateLimitSecLevel {
 }
 
 impl UIDRateLimitSecLevel {
-    /// 最大权重50
-    const MAX: usize = 50;
+    /// 最大权重100
+    const MAX: usize = 100;
 
     fn reset(&mut self) {
         self.remain = Self::MAX;
@@ -103,7 +103,7 @@ impl UIDRateLimitSecLevel {
     }
 }
 
-/// 日级别的UID限速规则，每天最多只能下单16W次
+/// 日级别的UID限速规则，每天最多只能下单20W次
 #[derive(Debug)]
 struct UIDRateLimitDayLevel {
     /// 本阶段剩余的数量
@@ -111,8 +111,8 @@ struct UIDRateLimitDayLevel {
 }
 
 impl UIDRateLimitDayLevel {
-    /// 最大权重160000
-    const MAX: usize = 160000;
+    /// 最大权重200000
+    const MAX: usize = 200000;
 
     fn reset(&mut self) {
         self.remain = Self::MAX;

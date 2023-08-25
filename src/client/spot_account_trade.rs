@@ -10,10 +10,10 @@ use crate::{
     types::{
         account::{Account, ListenKey},
         order::{CancelOpenOrdersInfo, CancelOrderInfo, MyTrades, Order, OrderInfo},
-        rate_limit::RateLimitInfo,
     },
     utils::SymbolInfoExt,
 };
+use ba_types::RateLimit;
 use serde::Serialize;
 use std::fmt::Debug;
 use tracing::instrument;
@@ -25,7 +25,8 @@ impl RestConn {
     pub async fn account(&self) -> BiAnResult<Account> {
         let path = "/api/v3/account";
         let params = PAccount;
-        let res = self.rest_req("get", path, params, Some(10)).await?;
+        let rate_limit = 20;
+        let res = self.rest_req("get", path, params, Some(rate_limit)).await?;
         let account_info = serde_json::from_str::<Account>(&res)?;
         Ok(account_info)
     }
@@ -194,7 +195,8 @@ impl RestConn {
     ) -> BiAnResult<OrderInfo> {
         let path = "/api/v3/order";
         let params = PGetOrder::new(symbol, order_id, orig_client_order_id)?;
-        let res = self.rest_req("get", path, params, Some(2)).await?;
+        let rate_limit = 4;
+        let res = self.rest_req("get", path, params, Some(rate_limit)).await?;
         let order_info = serde_json::from_str::<OrderInfo>(&res)?;
         Ok(order_info)
     }
@@ -204,8 +206,8 @@ impl RestConn {
     pub async fn get_open_orders(&self, symbol: Option<&str>) -> BiAnResult<Vec<OrderInfo>> {
         let path = "/api/v3/openOrders";
         let (sym, rate_limit) = match symbol {
-            Some(s) => (Some(s.to_string()), 3),
-            None => (None, 40),
+            Some(s) => (Some(s.to_string()), 6),
+            None => (None, 80),
         };
         let params = PGetOpenOrders::new(sym);
         let res = self.rest_req("get", path, params, Some(rate_limit)).await?;
@@ -225,7 +227,8 @@ impl RestConn {
     ) -> BiAnResult<Vec<OrderInfo>> {
         let path = "/api/v3/allOrders";
         let params = PAllOrders::new(symbol, order_id, start_time, end_time, limit);
-        let res = self.rest_req("get", path, params, Some(10)).await?;
+        let rate_limit = 20;
+        let res = self.rest_req("get", path, params, Some(rate_limit)).await?;
         let all_orders_info = serde_json::from_str::<Vec<OrderInfo>>(&res)?;
         Ok(all_orders_info)
     }
@@ -243,18 +246,20 @@ impl RestConn {
     ) -> BiAnResult<Vec<MyTrades>> {
         let path = "/api/v3/myTrades";
         let params = PMyTrades::new(symbol, order_id, start_time, end_time, from_id, limit);
-        let res = self.rest_req("get", path, params, Some(10)).await?;
+        let rate_limit = 20;
+        let res = self.rest_req("get", path, params, Some(rate_limit)).await?;
         let trades_info = serde_json::from_str::<Vec<MyTrades>>(&res)?;
         Ok(trades_info)
     }
 
     /// 查询目前下单数
     #[instrument(skip(self))]
-    pub async fn rate_limit_info(&self) -> BiAnResult<Vec<RateLimitInfo>> {
+    pub async fn rate_limit_info(&self) -> BiAnResult<Vec<RateLimit>> {
         let path = "/api/v3/rateLimit/order";
         let params = PRateLimitInfo;
-        let res = self.rest_req("get", path, params, Some(20)).await?;
-        let rate_limit_info = serde_json::from_str::<Vec<RateLimitInfo>>(&res)?;
+        let rate_limit = 40;
+        let res = self.rest_req("get", path, params, Some(rate_limit)).await?;
+        let rate_limit_info = serde_json::from_str::<Vec<RateLimit>>(&res)?;
         Ok(rate_limit_info)
     }
 }
@@ -282,7 +287,9 @@ impl RestConn {
             _ => panic!("error action, valid action: post/put/delete"),
         };
 
-        let res = self.rest_req(method, path, params, Some(1)).await?;
+        let res = self
+            .rest_req(method, path, params, Some(2))
+            .await?;
         let listen_key = serde_json::from_str::<ListenKey>(&res)?;
         Ok(listen_key.listen_key)
     }
