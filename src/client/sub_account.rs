@@ -1,7 +1,6 @@
-use tracing::instrument;
-
 use super::{
     params::{PSubAccountAssets, PSubAccountList, PSubAccountUniversalTransfer},
+    rate_limit::RateLimitParam,
     RestConn,
 };
 use crate::{
@@ -9,6 +8,7 @@ use crate::{
     types::sub_account::{SubAccountBalances, SubAccounts, UniversalTransfer},
     Balances,
 };
+use tracing::instrument;
 
 /// 字母账户相关接口
 impl RestConn {
@@ -21,7 +21,9 @@ impl RestConn {
     ) -> BiAnResult<SubAccounts> {
         let path = "/sapi/v1/sub-account/list";
         let params = PSubAccountList::new(email, is_freeze);
-        let res = self.rest_req("get", path, params, Some(1)).await?;
+        let res = self
+            .rest_req("get", path, params, RateLimitParam::Weight(1))
+            .await?;
         let sub_account_list = serde_json::from_str::<SubAccounts>(&res)?;
         Ok(sub_account_list)
     }
@@ -31,7 +33,9 @@ impl RestConn {
     pub async fn sub_account_assests(&self, email: &str) -> BiAnResult<Balances> {
         let path = "/sapi/v3/sub-account/assets";
         let params = PSubAccountAssets::new(email);
-        let res = self.rest_req("get", path, params, Some(1)).await?;
+        let res = self
+            .rest_req("get", path, params, RateLimitParam::Weight(1))
+            .await?;
         let sub_account_balances = serde_json::from_str::<SubAccountBalances>(&res)?;
         Ok(sub_account_balances.balances)
     }
@@ -69,7 +73,9 @@ impl RestConn {
             amount,
             symbol,
         )?;
-        let res = self.rest_req("post", path, params, Some(1)).await?;
+        let res = self
+            .rest_req("post", path, params, RateLimitParam::Weight(1))
+            .await?;
         let res = serde_json::from_str::<UniversalTransfer>(&res)?;
         Ok(res)
     }

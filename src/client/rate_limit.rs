@@ -1,369 +1,374 @@
-//! 实现接口限速规则，只实现`/api/*`接口的限频规则。
+//! 从 RateLimit 来更新
 //!
-//! 暂不考虑实现`/sapi/*`接口的限频规则。`/sapi/*`的每个接口都享有独立的限速权重，
-//! 由于每个接口的权重值都较大(ip类限速是每分钟12000，UID类是每分钟180000)，理论上无需去限速  
+//! [{
+//!    "rateLimitType": "REQUEST_WEIGHT",
+//!    "interval": "MINUTE",
+//!    "intervalNum": 1,
+//!    "limit": 6000
+//! }, {
+//!    "rateLimitType": "ORDERS",
+//!    "interval": "SECOND",
+//!    "intervalNum": 10,
+//!    "limit": 50
+//! }, {
+//!    "rateLimitType": "ORDERS",
+//!    "interval": "DAY",
+//!    "intervalNum": 1,
+//!    "limit": 160000
+//! }, {
+//!    "rateLimitType": "RAW_REQUESTS",
+//!    "interval": "MINUTE",
+//!    "intervalNum": 5,
+//!    "limit": 61000
+//!    }
+//! ]
 
-use crate::now0;
-use chrono::Timelike;
-use std::{sync::Arc, time::Duration};
-use tokio::{sync::RwLock, task, time};
-use tracing::trace;
+use ba_types::{ExchangeInfo, RateLimit, RateLimitInterVal, RateLimitType};
+use chrono::{DateTime, FixedOffset, Timelike};
+use chrono_ext::{now0, ParseDateTimeExt};
+use std::sync::Arc;
+use tokio::sync::RwLock;
+use tracing::error;
 
-/// IP限频，除了下单操作，都采用IP限频规则
+/// 发送的请求属于哪种类型的限速
 #[derive(Debug)]
-struct IPRateLimit {
-    /// 本阶段剩余的数量
-    remain: usize,
+pub enum RateLimitParam {
+    /// 该请求不是下单操作，参数值表示该请求所需权重值
+    Weight(u32),
+    /// 该请求是下单操作，参数值表示该请求所需权重值
+    Order(u32),
+    /// 该请求包含了下单操作(比如撤单再自动下单的请求)
+    ///
+    /// 参数值表示该请求所需权重值
+    Both(u32),
 }
 
-impl IPRateLimit {
-    /// 最大权重1200
-    const MAX: usize = 6000;
+struct RestApiRateLimitInfo {
+    rate_limit: RateLimit,
+    /// 剩余的次数
+    remain: u32,
+    /// 限速被重置的时间
+    reset_datetime: DateTime<FixedOffset>,
+}
 
-    fn reset(&mut self) {
-        self.remain = Self::MAX;
-        trace!("IPRateLimit Reset: {:?}", self.remain);
+impl RestApiRateLimitInfo {
+    fn new(rate_limit: RateLimit) -> Self {
+        Self {
+            remain: rate_limit.limit,
+            rate_limit,
+            reset_datetime: now0(),
+        }
     }
 
-    fn get(&mut self, n: usize) -> bool {
-        if self.remain < n {
-            return false;
-        }
-
-        self.remain -= n;
-        true
-    }
-
-    fn remain(&self) -> usize {
-        self.remain
-    }
-
-    fn set(&mut self, used: usize) -> bool {
-        if used > Self::MAX {
-            return false;
-        }
-        let left = Self::MAX - used;
-        if left < self.remain {
-            self.remain = left;
-        }
-        true
+    fn reset_permits(&mut self) {
+        self.remain = self.rate_limit.limit;
+        self.reset_datetime = now0();
     }
 }
 
-impl Default for IPRateLimit {
+struct RestApiRateLimitsInner {
+    /// 按权重计数的每分钟的限速(默认：每分钟6000权重值)
+    weight: RestApiRateLimitInfo,
+    /// 按请求次数计数的每10秒的下单次数限速(默认：每10秒50次下单请求)
+    order_sec10: RestApiRateLimitInfo,
+    /// 按请求次数计数的每天的下单次数限速(默认：每天16W次下单请求)
+    order_day1: RestApiRateLimitInfo,
+    /// 按请求次数计数的每5分钟的请求次数限速(默认：5分钟61000次请求)
+    raw_requests: RestApiRateLimitInfo,
+}
+
+impl Default for RestApiRateLimitsInner {
     fn default() -> Self {
-        Self { remain: Self::MAX }
-    }
-}
+        let weight_rl = RateLimit {
+            rate_limit_type: RateLimitType::RequestWeight,
+            interval: RateLimitInterVal::Minute,
+            interval_num: 1,
+            limit: 6000,
+            count: 0,
+        };
 
-/// 秒级别的UID限速规则，每10秒最多只能下单100次
-#[derive(Debug)]
-struct UIDRateLimitSecLevel {
-    /// 本阶段剩余的数量
-    remain: usize,
-}
+        let order_sec10_rl = RateLimit {
+            rate_limit_type: RateLimitType::Orders,
+            interval: RateLimitInterVal::Second,
+            interval_num: 10,
+            limit: 50,
+            count: 0,
+        };
 
-impl Default for UIDRateLimitSecLevel {
-    fn default() -> Self {
-        Self { remain: Self::MAX }
-    }
-}
+        let order_day1_rl = RateLimit {
+            rate_limit_type: RateLimitType::Orders,
+            interval: RateLimitInterVal::Day,
+            interval_num: 1,
+            limit: 160000,
+            count: 0,
+        };
 
-impl UIDRateLimitSecLevel {
-    /// 最大权重100
-    const MAX: usize = 100;
+        let raw_requests_rl = RateLimit {
+            rate_limit_type: RateLimitType::RawRequests,
+            interval: RateLimitInterVal::Minute,
+            interval_num: 5,
+            limit: 61000,
+            count: 0,
+        };
 
-    fn reset(&mut self) {
-        self.remain = Self::MAX;
-        trace!("UIDRateLimitSecLevel Reset: {:?}", self.remain);
-    }
-
-    fn get(&mut self, n: usize) -> bool {
-        if self.remain < n {
-            return false;
+        Self {
+            weight: RestApiRateLimitInfo::new(weight_rl),
+            order_sec10: RestApiRateLimitInfo::new(order_sec10_rl),
+            order_day1: RestApiRateLimitInfo::new(order_day1_rl),
+            raw_requests: RestApiRateLimitInfo::new(raw_requests_rl),
         }
-
-        self.remain -= n;
-        true
-    }
-
-    fn remain(&self) -> usize {
-        self.remain
-    }
-
-    fn set(&mut self, used: usize) -> bool {
-        if used > Self::MAX {
-            return false;
-        }
-        let left = Self::MAX - used;
-        if left < self.remain {
-            self.remain = left;
-        }
-        true
     }
 }
 
-/// 日级别的UID限速规则，每天最多只能下单20W次
-#[derive(Debug)]
-struct UIDRateLimitDayLevel {
-    /// 本阶段剩余的数量
-    remain: usize,
+#[derive(Clone)]
+pub(crate) struct RestApiRateLimits {
+    inner: Arc<RwLock<RestApiRateLimitsInner>>,
 }
 
-impl UIDRateLimitDayLevel {
-    /// 最大权重200000
-    const MAX: usize = 200000;
-
-    fn reset(&mut self) {
-        self.remain = Self::MAX;
-        trace!("UIDRateLimitDayLevel Reset: {:?}", self.remain);
-    }
-
-    fn get(&mut self, n: usize) -> bool {
-        if self.remain < n {
-            return false;
-        }
-
-        self.remain -= n;
-        true
-    }
-
-    fn remain(&self) -> usize {
-        self.remain
-    }
-
-    fn set(&mut self, used: usize) -> bool {
-        if used > Self::MAX {
-            return false;
-        }
-        let left = Self::MAX - used;
-        if left < self.remain {
-            self.remain = left;
-        }
-        true
-    }
-}
-
-impl Default for UIDRateLimitDayLevel {
-    fn default() -> Self {
-        Self { remain: Self::MAX }
-    }
-}
-
-/// UID限速，下单时使用UID限速规则
-#[derive(Debug, Default)]
-struct UIDRateLimit {
-    secs: UIDRateLimitSecLevel,
-    day: UIDRateLimitDayLevel,
-}
-
-impl UIDRateLimit {
-    fn reset_secs(&mut self) {
-        self.secs.reset();
-    }
-
-    fn reset_day(&mut self) {
-        self.day.reset();
-    }
-
-    fn get(&mut self, n: usize) -> bool {
-        if self.secs.remain() < n || self.day.remain() < n {
-            return false;
-        }
-
-        self.secs.get(n);
-        self.day.get(n);
-        true
-    }
-
-    fn secs_remain(&self) -> usize {
-        self.secs.remain()
-    }
-
-    fn day_remain(&self) -> usize {
-        self.day.remain()
-    }
-
-    fn set_secs(&mut self, used: usize) -> bool {
-        self.secs.set(used)
-    }
-
-    fn set_day(&mut self, used: usize) -> bool {
-        self.day.set(used)
-    }
-
-    fn set(&mut self, sec_used: usize, day_used: usize) -> bool {
-        if sec_used > UIDRateLimitSecLevel::MAX || day_used > UIDRateLimitDayLevel::MAX {
-            return false;
-        }
-        self.set_secs(sec_used);
-        self.set_day(day_used);
-        true
-    }
-}
-
-/// `/api/xxx`接口的限速规则
-#[derive(Debug, Clone, Default)]
-pub struct APIRateLimit {
-    /// IP限速
-    ip_limit: Arc<RwLock<IPRateLimit>>,
-
-    /// UID限速，下单时使用该限速接口
-    uid_limit: Arc<RwLock<UIDRateLimit>>,
-}
-
-impl APIRateLimit {
-    /// ip限速规则的最大权重，值为1200
-    pub const IP_WEIGHT_MAX: usize = IPRateLimit::MAX;
-    /// uid秒级限速规则的最大权重，值为50
-    pub const UID_SEC_WEIGHT_MAX: usize = UIDRateLimitSecLevel::MAX;
-    /// uid秒级限速规则的最大权重，值为160000
-    pub const UID_DAY_WEIGHT_MAX: usize = UIDRateLimitDayLevel::MAX;
-
-    /// 开始执行限速规则，需spawn一个单独的任务来执行
+impl RestApiRateLimits {
+    /// 获取到exchange_info信息之后，应立即调用 `update()` 方法进行更新
     pub async fn new() -> Self {
-        let rate_limit = Self::default();
+        let s = Self {
+            inner: Arc::new(RwLock::new(RestApiRateLimitsInner::default())),
+        };
 
-        let r = rate_limit.clone();
+        let ss = s.clone();
         tokio::spawn(async move {
-            r.rate_maintainer().await;
+            ss.run_tick().await;
         });
 
-        rate_limit
+        s
     }
 
-    /// 取n个IP限速的权重，权重不足将一直等待，直到权重值充足
-    pub async fn get_ip_permit(&self, n: usize) {
-        loop {
-            let mut ip_limit = self.ip_limit.write().await;
-            if ip_limit.get(n) {
-                break;
-            }
-            drop(ip_limit);
-            task::yield_now().await;
+    /// 根据给定的exchange_info更新限速规则的最大值，而不是继续使用默认值
+    pub async fn update(&self, exchange_info: &ExchangeInfo) {
+        let limits = &exchange_info.rate_limits;
+        let weight = limits
+            .iter()
+            .find(|x| matches!(x.rate_limit_type, RateLimitType::RequestWeight))
+            .map(|x| x.limit);
+
+        let order_sec10 = limits
+            .iter()
+            .find(|x| {
+                matches!(x.rate_limit_type, RateLimitType::Orders)
+                    && matches!(x.interval, RateLimitInterVal::Second)
+            })
+            .map(|x| x.limit);
+
+        let order_day1 = limits
+            .iter()
+            .find(|x| {
+                matches!(x.rate_limit_type, RateLimitType::Orders)
+                    && matches!(x.interval, RateLimitInterVal::Day)
+            })
+            .map(|x| x.limit);
+
+        let raw_requests = limits
+            .iter()
+            .find(|x| matches!(x.rate_limit_type, RateLimitType::RawRequests))
+            .map(|x| x.limit);
+
+        let mut inner = self.inner.write().await;
+        if let Some(limit) = weight {
+            inner.weight.rate_limit.limit = limit;
+        }
+        if let Some(limit) = order_sec10 {
+            inner.order_sec10.rate_limit.limit = limit;
+        }
+        if let Some(limit) = order_day1 {
+            inner.order_day1.rate_limit.limit = limit;
+        }
+        if let Some(limit) = raw_requests {
+            inner.raw_requests.rate_limit.limit = limit;
         }
     }
 
-    /// 尝试取n个IP限速的权重，立即返回而不会等待，取成功返回true，权重不足将返回false
-    pub async fn try_get_ip_permit(&self, n: usize) -> bool {
-        self.ip_limit.write().await.get(n)
-    }
+    /// 尝试获取 n 个权重值(如果剩余权重值不够，将一直等待，直到权重值足够)
+    pub async fn acquire_permits(&self, limit_param: RateLimitParam) {
+        let (n, order_flag) = match limit_param {
+            RateLimitParam::Weight(n) => (n, false),
+            RateLimitParam::Order(n) => (n, true),
+            RateLimitParam::Both(n) => (n, true),
+        };
 
-    /// 查看IP限速的剩余权重
-    pub async fn ip_permits_remain(&self) -> usize {
-        self.ip_limit.write().await.remain()
-    }
-
-    /// 更新IP限速的权重，需提供已使用权重的数量，如果提供的数量大于`IP_WEIGHT_MAX`的值，不做任何事并返回false
-    pub async fn set_ip_permit(&self, used: usize) -> bool {
-        self.ip_limit.write().await.set(used)
-    }
-
-    /// 取n个UID限速的权重，权重不足将一直等待，直到权重值充足
-    pub async fn get_uid_permit(&self, n: usize) {
         loop {
-            let mut uid_limit = self.uid_limit.write().await;
-            if uid_limit.get(n) {
-                break;
-            }
-            drop(uid_limit);
-            task::yield_now().await;
-        }
-    }
+            let mut inner = self.inner.write().await;
 
-    /// 尝试取n个UID限速的权重，立即返回而不会等待，取成功返回true，权重不足将返回false
-    pub async fn try_get_uid_permit(&self, n: usize) -> bool {
-        self.uid_limit.write().await.get(n)
-    }
-
-    /// 查看UID限速的剩余权重，返回秒级别的剩余权重和天级别的剩余权重
-    pub async fn uid_permits_remain(&self) -> (usize, usize) {
-        let uid_limit = self.uid_limit.write().await;
-        (uid_limit.secs_remain(), uid_limit.day_remain())
-    }
-
-    /// 更新UID限速的权重，需提供秒级和日级别已使用权重的数量，如果提供的秒级已使用的权重数量
-    /// 大于`UID_SEC_WEIGHT_MAX`，或提供的日级已使用的权重数量大于`UID_DAY_WEIGHT_MAX`的值，不做任何事并返回false
-    pub async fn set_uid_permit(&self, sec_used: usize, day_used: usize) -> bool {
-        self.uid_limit.write().await.set(sec_used, day_used)
-    }
-
-    async fn reset_ip_limit(&self) {
-        self.ip_limit.write().await.reset();
-    }
-
-    async fn reset_uid_secs_limit(&self) {
-        self.uid_limit.write().await.reset_secs();
-    }
-
-    #[allow(dead_code)]
-    async fn reset_uid_day_limit(&self) {
-        self.uid_limit.write().await.reset_day();
-    }
-
-    // 只获取一次写锁，同时重置日级和秒级的UID限速值
-    async fn reset_uid_limit(&self) {
-        let mut uid_limit = self.uid_limit.write().await;
-        uid_limit.reset_day();
-        uid_limit.reset_secs();
-    }
-
-    /// ip限速规则的时间间隔，值为1分钟，  
-    /// uid秒级限速规则的时间间隔，值为10秒，  
-    /// uid秒级限速规则的时间间隔，值为一天，  
-    /// 均从UTC的整点开始计时  
-    async fn rate_maintainer(&self) {
-        let tick_interval = Duration::from_secs(1);
-
-        // 先对齐到秒的开头
-        loop {
-            let now = now0().nanosecond();
-            // 在秒的前10毫秒
-            if now <= 10_000_000 {
-                break;
-            }
-            time::sleep(time::Duration::from_millis(1)).await;
-        }
-
-        let mut intv = time::interval(tick_interval);
-        loop {
-            let now = now0();
-            let (h, m, s) = (now.hour(), now.minute(), now.second());
-
-            // 整10秒时(延迟1秒)，如果是UTC 00:00:00，则同时重置秒级和日级的限速值(放在一起重置将只获取一次写锁)，否则只重置秒级
-            if s % 10 == 1 {
-                if h == 0 && m == 0 && s == 1 {
-                    self.reset_uid_limit().await;
-                } else {
-                    self.reset_uid_secs_limit().await;
+            if order_flag {
+                if inner.weight.remain >= n
+                    && inner.raw_requests.remain >= 1
+                    && inner.order_sec10.remain >= 1
+                    && inner.order_day1.remain >= 1
+                {
+                    inner.weight.remain -= n;
+                    inner.raw_requests.remain -= 1;
+                    inner.order_sec10.remain -= 1;
+                    inner.order_day1.remain -= 1;
+                    break;
+                }
+            } else {
+                if inner.weight.remain >= n && inner.raw_requests.remain >= 1 {
+                    inner.weight.remain -= n;
+                    inner.raw_requests.remain -= 1;
+                    break;
                 }
             }
 
-            if s == 1 {
-                self.reset_ip_limit().await;
-            }
+            drop(inner);
+            tokio::task::yield_now().await;
+        }
+    }
 
-            intv.tick().await;
+    /// 更新限速的值，传递的是当前限速时间段内已经使用的值
+    ///
+    /// date: 该Rest响应是在什么时间点发出的(格式"Fri, 25 Aug 2023 10:14:35 GMT")
+    pub async fn set_permits(
+        &self,
+        response_date: String,
+        weight_used: Option<u32>,
+        order_sec10: Option<u32>,
+        order_day1: Option<u32>,
+    ) {
+        let response_date = match response_date.to_dt_east0("%a, %d %b %Y %T %Z") {
+            Ok(dt) => dt,
+            Err(_) => {
+                error!("parse str({}) to datetime", response_date);
+                now0()
+            }
+        };
+
+        let mut inner = self.inner.write().await;
+
+        /*
+         * 实际消耗的值(n)和计算消耗的值(max_limit - remain)，两者取max，
+         * 因为请求响应后得到n，但响应前可能已经再次发起过请求，这时n值是滞后的。
+         *
+         * 但这样可能会出现一种问题：上一刻刚进行重置，而此处传递的是上一个限速时
+         * 间段内的已使用的值(可能是一个很大的已使用值)，这将导致剩余值瞬间回到上
+         * 一个时间段结束时的状态(很可能已经只剩下少量可使用值)，
+         *
+         * 例如，01:04:59.600的时候发送了一个请求，该时间段内的权重值只剩下5，
+         * 该请求到了05分时才收到响应，该响应中的已使用值是5995，于是05分时进行更新，
+         * 将瞬间从满血状态变成残血状态
+         *
+         * 因此，通过判断 response_date 的响应时间来判断该响应发生在重置前还是重置后，
+         * 只有响应发生在重置后，才更新当前已经消耗的值
+         */
+        if inner.weight.reset_datetime < response_date {
+            if let Some(n) = weight_used {
+                let used = (inner.weight.rate_limit.limit - inner.weight.remain).max(n);
+                inner.weight.remain = inner.weight.rate_limit.limit - used;
+            }
+        }
+
+        if inner.order_sec10.reset_datetime < response_date {
+            if let Some(n) = order_sec10 {
+                let used = (inner.order_sec10.rate_limit.limit - inner.order_sec10.remain).max(n);
+                inner.order_sec10.remain = inner.order_sec10.rate_limit.limit - used;
+            }
+        }
+
+        if inner.order_day1.reset_datetime < response_date {
+            if let Some(n) = order_day1 {
+                let used = (inner.order_day1.rate_limit.limit - inner.order_day1.remain).max(n);
+                inner.order_day1.remain = inner.order_day1.rate_limit.limit - used;
+            }
         }
     }
 }
 
-// #[cfg(test)]
-// mod test_rate_limit {
-//     use super::*;
-//     use tokio::time;
+impl RestApiRateLimits {
+    /// tick，到了限速时间段的结束点就自动重置限速值
+    pub async fn run_tick(&self) {
+        let now = now0();
+        let now_epoch = now.timestamp_millis();
 
-//     fn now() -> String {
-//         now8().format("%FT%T.%3f").to_string()
-//     }
+        // 10秒间隔，每10秒tick一次
+        let tick_intv = tokio::time::Duration::from_secs(10);
 
-//     #[tokio::test]
-//     async fn test_ip_rate_limit() {
-//         let api_limit = APIRateLimit::new().await;
-//         loop {
-//             time::sleep(time::Duration::from_millis(100)).await;
-//             api_limit.get_ip_permit(50).await;
-//             println!("{}, {}", now(), api_limit.ip_permits_remain().await);
-//         }
-//     }
-// }
+        // 下一个整10秒的epoch时间点，将从此开始进行tick
+        let next_sec10_epoch = (now_epoch - now_epoch % 10_000) + 10_000;
+        let start_tick = tokio::time::Instant::now()
+            + tokio::time::Duration::from_millis((next_sec10_epoch - now_epoch) as u64);
+        let mut ticker = tokio::time::interval_at(start_tick, tick_intv);
+
+        loop {
+            ticker.tick().await;
+
+            let now = now0();
+            let (h, m, s) = (now.hour(), now.minute(), now.second());
+
+            if s % 10 == 0 {
+                // 到了每日的整点
+                if h == 0 && m == 0 && s == 0 {
+                    self.reset_weight_permits().await;
+                    self.reset_order_sec10_permits().await;
+                    self.reset_order_day1_permits().await;
+                    self.reset_raw_request_permits().await;
+                    continue;
+                }
+
+                // 到了5分钟的整点
+                if m % 5 == 0 && s == 0 {
+                    self.reset_raw_request_permits().await;
+                    continue;
+                }
+
+                // 到了每分钟的整点
+                if s == 0 {
+                    self.reset_weight_permits().await;
+                    continue;
+                }
+
+                // 到了每10秒的整点
+                self.reset_order_sec10_permits().await;
+            }
+        }
+    }
+
+    async fn reset_weight_permits(&self) {
+        let mut x = self.inner.write().await;
+        x.weight.reset_permits();
+    }
+
+    async fn reset_order_sec10_permits(&self) {
+        let mut x = self.inner.write().await;
+        x.order_sec10.reset_permits();
+    }
+
+    async fn reset_order_day1_permits(&self) {
+        let mut x = self.inner.write().await;
+        x.order_day1.reset_permits();
+    }
+
+    async fn reset_raw_request_permits(&self) {
+        let mut x = self.inner.write().await;
+        x.raw_requests.reset_permits();
+    }
+}
+
+#[cfg(test)]
+mod tt {
+    use chrono_ext::ParseDateTimeExt;
+
+    #[tokio::test]
+    async fn t() {
+        let str = "Fri, 25 Aug 2023 10:14:35 GMT";
+        println!("{:?}", str.to_dt_east0("%a, %d %b %Y %T %Z"));
+
+        // let now = now0();
+        // let now_epoch = now.timestamp_millis();
+
+        // // 10秒间隔
+        // let tick_intv = tokio::time::Duration::from_secs(10);
+
+        // // 下一个整10秒的epoch时间点，将从此开始进行tick
+        // let next_sec10_epoch = (now_epoch - now_epoch % 10_000) + 10_000;
+        // let start_tick = tokio::time::Instant::now()
+        //     + tokio::time::Duration::from_millis((next_sec10_epoch - now_epoch) as u64);
+        // let mut ticker = tokio::time::interval_at(start_tick, tick_intv);
+        // ticker.tick().await;
+        // println!("{}", now0());
+    }
+}

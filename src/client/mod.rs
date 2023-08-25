@@ -24,7 +24,8 @@ pub mod sub_account;
 pub mod wallet;
 
 /// 限速规则
-pub mod rate_limit;
+// pub mod rate_limit;
+pub(crate) mod rate_limit;
 
 pub use rest::*;
 #[cfg(feature = "websocket")]

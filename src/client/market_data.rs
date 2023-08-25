@@ -1,4 +1,6 @@
 use crate::app_dir;
+
+use super::rate_limit::RateLimitParam;
 use {
     super::{
         params::{
@@ -25,7 +27,9 @@ impl RestConn {
     #[instrument(skip(self))]
     pub async fn ping(&self) -> BiAnResult<bool> {
         let path = "/api/v3/ping";
-        let res = self.rest_req("get", path, PPing, Some(1)).await?;
+        let res = self
+            .rest_req("get", path, PPing, RateLimitParam::Weight(1))
+            .await?;
         Ok(res == "{}")
     }
 
@@ -33,7 +37,7 @@ impl RestConn {
     #[instrument(skip(self))]
     pub async fn server_time(&self) -> BiAnResult<u64> {
         let path = "/api/v3/time";
-        let res = self.rest_req("get", path, PServerTime, Some(1)).await?;
+        let res = self.rest_req("get", path, PServerTime, RateLimitParam::Weight(1)).await?;
         let time_res = serde_json::from_str::<ServerTime>(&res)?;
         Ok(time_res.server_time)
     }
@@ -79,7 +83,9 @@ impl RestConn {
             }
         }
 
-        let res = self.rest_req("get", path, params, Some(20)).await?;
+        let res = self
+            .rest_req("get", path, params, RateLimitParam::Weight(20))
+            .await?;
         if c_res.is_ok() && fs::write(&exchange_info_file, res.as_bytes()).await.is_ok() {}
 
         let exchange_info = serde_json::from_str::<ExchangeInfo>(&res)?;
@@ -104,7 +110,9 @@ impl RestConn {
         };
 
         let params = PDepth::new(symbol, limit)?;
-        let res = self.rest_req("get", path, params, Some(rate_limit)).await?;
+        let res = self
+            .rest_req("get", path, params, RateLimitParam::Weight(rate_limit))
+            .await?;
         let depth = serde_json::from_str::<Depth>(&res)?;
         Ok(depth)
     }
@@ -115,7 +123,7 @@ impl RestConn {
         let path = "/api/v3/trades";
         let params = PTrades::new(symbol, limit)?;
         let res = self
-            .rest_req("get", path, params, Some(2))
+            .rest_req("get", path, params, RateLimitParam::Weight(2))
             .await?;
         let trades = serde_json::from_str::<Vec<Trade>>(&res)?;
         Ok(trades)
@@ -132,7 +140,7 @@ impl RestConn {
         let path = "/api/v3/historicalTrades";
         let params = PHistoricalTrades::new(symbol, limit, from_id)?;
         let res = self
-            .rest_req("get", path, params, Some(10))
+            .rest_req("get", path, params, RateLimitParam::Weight(10))
             .await?;
         let historical_trades = serde_json::from_str::<Vec<HistoricalTrade>>(&res)?;
         Ok(historical_trades)
@@ -153,7 +161,7 @@ impl RestConn {
         let path = "/api/v3/aggTrades";
         let params = PAggTrades::new(symbol, from_id, start_time, end_time, limit)?;
         let res = self
-            .rest_req("get", path, params, Some(2))
+            .rest_req("get", path, params, RateLimitParam::Weight(2))
             .await?;
         let agg_trades = serde_json::from_str::<Vec<AggTrade>>(&res)?;
         Ok(agg_trades)
@@ -184,7 +192,7 @@ impl RestConn {
             .unwrap()
             .as_millis();
         let res = self
-            .rest_req("get", path, params, Some(2))
+            .rest_req("get", path, params, RateLimitParam::Weight(2))
             .await?;
         let now_af = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
@@ -213,9 +221,7 @@ impl RestConn {
     pub async fn avg_price(&self, symbol: &str) -> BiAnResult<AvgPrice> {
         let path = "/api/v3/avgPrice";
         let params = PAvgPrice::new(symbol);
-        let res = self
-            .rest_req("get", path, params, Some(2))
-            .await?;
+        let res = self.rest_req("get", path, params, RateLimitParam::Weight(2)).await?;
         let avg_price = serde_json::from_str::<AvgPrice>(&res)?;
         Ok(avg_price)
     }
@@ -231,7 +237,7 @@ impl RestConn {
             _ => 80,
         };
         let params = PHr24::new(symbols);
-        let res = self.rest_req("get", path, params, Some(rate_limit)).await?;
+        let res = self.rest_req("get", path, params, RateLimitParam::Weight(rate_limit)).await?;
         let hrs = serde_json::from_str::<FullTickers>(&res)?;
         Ok(hrs)
     }
@@ -246,7 +252,7 @@ impl RestConn {
             _ => 4,
         };
         let params = PPrice::new(symbols);
-        let res = self.rest_req("get", path, params, Some(rate_limit)).await?;
+        let res = self.rest_req("get", path, params, RateLimitParam::Weight(rate_limit)).await?;
         let prices = serde_json::from_str::<Prices>(&res)?;
         Ok(prices)
     }
@@ -261,7 +267,7 @@ impl RestConn {
             _ => 4,
         };
         let params = PBookTicker::new(symbols);
-        let res = self.rest_req("get", path, params, Some(rate_limit)).await?;
+        let res = self.rest_req("get", path, params, RateLimitParam::Weight(rate_limit)).await?;
         let tickers = serde_json::from_str::<BookTickers>(&res)?;
         Ok(tickers)
     }

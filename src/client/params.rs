@@ -712,9 +712,6 @@ impl Param for PDustBtc {
     fn check_type(&self) -> CheckType {
         CheckType::UserData
     }
-    fn rate_limit(&self) -> PRateLimit {
-        PRateLimit::ApiUid
-    }
 }
 
 #[derive(Debug)]

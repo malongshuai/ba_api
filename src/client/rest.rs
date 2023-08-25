@@ -1,5 +1,5 @@
 use crate::{
-    client::params::PRateLimit,
+    client::rate_limit::RateLimitParam,
     errors::{BadRequest, BiAnApiError, BiAnResult, MethodError},
     utils::ExchangeInfoExt,
     ExchangeInfo, SymbolInfo, REST_BASE_URL,
@@ -12,7 +12,7 @@ use tracing::{error, warn};
 
 use super::{
     params::{CheckType, Param},
-    rate_limit::APIRateLimit,
+    rate_limit::RestApiRateLimits,
 };
 
 /// REST响应体
@@ -90,7 +90,7 @@ pub struct RestConn {
     api_key: Arc<String>,
     sec_key: Arc<String>,
     base_url: Url,
-    rate_limit: APIRateLimit,
+    rate_limit: RestApiRateLimits,
     exchange_info: Arc<Option<ExchangeInfo>>,
 }
 
@@ -129,7 +129,7 @@ impl RestConn {
             api_key: Arc::new(api_key),
             sec_key: Arc::new(sec_key),
             base_url: Url::parse(REST_BASE_URL).unwrap(),
-            rate_limit: APIRateLimit::new().await,
+            rate_limit: RestApiRateLimits::new().await,
             exchange_info: Arc::new(None),
         };
 
@@ -137,6 +137,9 @@ impl RestConn {
             Ok(exchange_info) => rest_conn.exchange_info = Arc::new(Some(exchange_info)),
             Err(e) => error!("get exchange_info failed: {}", e),
         }
+
+        let ex = rest_conn.get_exchange_info().unwrap();
+        rest_conn.rate_limit.update(ex).await;
 
         // if let Ok(exchange_info) = rest_conn.exchange_info(None).await {
         //     rest_conn.exchange_info = Arc::new(Some(exchange_info));
@@ -255,23 +258,16 @@ impl RestConn {
         method: &str,
         path: &str,
         params: P,
-        rate_limit: Option<usize>,
+        rate_limit: RateLimitParam,
     ) -> BiAnResult<RespBody>
     where
         P: Serialize + Param + Debug,
     {
         let url = self.make_url(path, &params);
 
-        // 获取限速值
-        if let Some(n) = rate_limit {
-            match params.rate_limit() {
-                PRateLimit::ApiIp => {
-                    self.rate_limit.get_ip_permit(n).await;
-                }
-                PRateLimit::ApiUid => {
-                    self.rate_limit.get_uid_permit(n).await;
-                }
-            }
+        // 获取限速值, /sapi的接口不做限速处理
+        if path.starts_with("/api") {
+            self.rate_limit.acquire_permits(rate_limit).await;
         }
 
         // 不重连的方案
@@ -319,6 +315,20 @@ impl RestConn {
             };
         }?;
 
+        /*
+         * {"content-type": "application/json;charset=UTF-8", "content-length": "374",
+         *  "connection": "keep-alive", "date": "Fri, 25 Aug 2023 10:12:14 GMT",
+         *  "server": "nginx", "vary": "Accept-Encoding", "x-mbx-uuid": "947f9327-0c5a-443c-dasd-6469921b2e29",
+         *  "x-mbx-used-weight": "1", "x-mbx-used-weight-1m": "1", "x-mbx-order-count-10s": "1",
+         *  "x-mbx-order-count-1d": "1", "strict-transport-security": "max-age=31536000; includeSubdomains",
+         *  "x-frame-options": "SAMEORIGIN", "x-xss-protection": "1; mode=block",
+         *  "x-content-type-options": "nosniff", "content-security-policy": "default-src 'self'",
+         *  "x-content-security-policy": "default-src 'self'", "x-webkit-csp": "default-src 'self'",
+         *  "cache-control": "no-cache, no-store, must-revalidate", "pragma": "no-cache", "expires": "0",
+         *  "access-control-allow-origin": "*", "access-control-allow-methods": "GET, HEAD, OPTIONS",
+         *  "x-cache": "Miss from cloudfront", "via": "1.1 sadfasdfasdf.cloudfront.net (CloudFront)",
+         *  "x-amz-cf-pop": "OSL50-C1", "x-amz-cf-id": "_dwdsdfdas"}
+         */
         let head = resp.headers();
         // println!("header: {:?}", head);
         // println!( "+ weight +{:?} {:?}", head.get("x-mbx-used-weight"), head.get("x-mbx-used-weight-1m") );
@@ -332,32 +342,25 @@ impl RestConn {
     }
 
     async fn set_rate_limit(&self, head: &header::HeaderMap) {
-        // 此为`/api/*`的IP限速
-        if let Some(used) = self.extract_weigth_header("x-mbx-used-weight-1m", head) {
-            self.rate_limit.set_ip_permit(used).await;
-        }
-        // 此为`/api/*`的UID限速
-        if let (Some(sec_used), Some(day_used)) = (
-            self.extract_weigth_header("x-mbx-order-count-10s", head),
-            self.extract_weigth_header("x-mbx-order-count-1d", head),
-        ) {
-            self.rate_limit.set_uid_permit(sec_used, day_used).await;
-        }
+        // "date": "Fri, 25 Aug 2023 10:14:35 GMT"
+        let date = self
+            .extract_weigth_header::<String>("date", head)
+            .unwrap_or_default();
+        let weight = self.extract_weigth_header::<u32>("x-mbx-used-weight-1m", head);
+        let order_sec10 = self.extract_weigth_header::<u32>("x-mbx-order-count-10s", head);
+        let order_day1 = self.extract_weigth_header::<u32>("x-mbx-order-count-1d", head);
+
+        self.rate_limit
+            .set_permits(date, weight, order_sec10, order_day1)
+            .await;
     }
 
-    fn extract_weigth_header(&self, key: &str, head: &header::HeaderMap) -> Option<usize> {
+    fn extract_weigth_header<T: FromStr>(&self, key: &str, head: &header::HeaderMap) -> Option<T> {
         if let Some(weight) = head.get(key) {
             if let Ok(used) = weight.to_str() {
-                return used.parse::<usize>().ok();
+                return used.parse::<T>().ok();
             }
         }
         None
-    }
-
-    /// 返回此刻剩余的限速权重,第一个是ip权重,第二个值为uid的秒级权重,第三个值为日级权重
-    pub async fn rate_limit_remains(&self) -> (usize, usize, usize) {
-        let ip_rate_limit = self.rate_limit.ip_permits_remain().await;
-        let (sec_uid, day_uid) = self.rate_limit.uid_permits_remain().await;
-        (ip_rate_limit, sec_uid, day_uid)
     }
 }
