@@ -37,7 +37,9 @@ impl RestConn {
     #[instrument(skip(self))]
     pub async fn server_time(&self) -> BiAnResult<u64> {
         let path = "/api/v3/time";
-        let res = self.rest_req("get", path, PServerTime, RateLimitParam::Weight(1)).await?;
+        let res = self
+            .rest_req("get", path, PServerTime, RateLimitParam::Weight(1))
+            .await?;
         let time_res = serde_json::from_str::<ServerTime>(&res)?;
         Ok(time_res.server_time)
     }
@@ -221,7 +223,9 @@ impl RestConn {
     pub async fn avg_price(&self, symbol: &str) -> BiAnResult<AvgPrice> {
         let path = "/api/v3/avgPrice";
         let params = PAvgPrice::new(symbol);
-        let res = self.rest_req("get", path, params, RateLimitParam::Weight(2)).await?;
+        let res = self
+            .rest_req("get", path, params, RateLimitParam::Weight(2))
+            .await?;
         let avg_price = serde_json::from_str::<AvgPrice>(&res)?;
         Ok(avg_price)
     }
@@ -237,7 +241,9 @@ impl RestConn {
             _ => 80,
         };
         let params = PHr24::new(symbols);
-        let res = self.rest_req("get", path, params, RateLimitParam::Weight(rate_limit)).await?;
+        let res = self
+            .rest_req("get", path, params, RateLimitParam::Weight(rate_limit))
+            .await?;
         let hrs = serde_json::from_str::<FullTickers>(&res)?;
         Ok(hrs)
     }
@@ -252,7 +258,9 @@ impl RestConn {
             _ => 4,
         };
         let params = PPrice::new(symbols);
-        let res = self.rest_req("get", path, params, RateLimitParam::Weight(rate_limit)).await?;
+        let res = self
+            .rest_req("get", path, params, RateLimitParam::Weight(rate_limit))
+            .await?;
         let prices = serde_json::from_str::<Prices>(&res)?;
         Ok(prices)
     }
@@ -267,7 +275,9 @@ impl RestConn {
             _ => 4,
         };
         let params = PBookTicker::new(symbols);
-        let res = self.rest_req("get", path, params, RateLimitParam::Weight(rate_limit)).await?;
+        let res = self
+            .rest_req("get", path, params, RateLimitParam::Weight(rate_limit))
+            .await?;
         let tickers = serde_json::from_str::<BookTickers>(&res)?;
         Ok(tickers)
     }
