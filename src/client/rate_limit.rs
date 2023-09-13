@@ -207,12 +207,10 @@ impl RestApiRateLimits {
                     inner.order_day1.remain -= 1;
                     break;
                 }
-            } else {
-                if inner.weight.remain >= n && inner.raw_requests.remain >= 1 {
-                    inner.weight.remain -= n;
-                    inner.raw_requests.remain -= 1;
-                    break;
-                }
+            } else if inner.weight.remain >= n && inner.raw_requests.remain >= 1 {
+                inner.weight.remain -= n;
+                inner.raw_requests.remain -= 1;
+                break;
             }
 
             drop(inner);

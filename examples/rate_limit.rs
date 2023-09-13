@@ -55,7 +55,6 @@ async fn f(rest_conn: RestConn) {
     let mut tasks = vec![];
     for _ in 0..4 {
         let conn = rest_conn.clone();
-        let syms = syms.clone();
         let t = tokio::spawn(async move {
             for sym in syms {
                 // 该Rest请求消耗100权重值

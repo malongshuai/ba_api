@@ -88,7 +88,9 @@ impl RestConn {
         let res = self
             .rest_req("get", path, params, RateLimitParam::Weight(20))
             .await?;
-        if c_res.is_ok() && fs::write(&exchange_info_file, res.as_bytes()).await.is_ok() {}
+        if c_res.is_ok() {
+            let _ = fs::write(&exchange_info_file, res.as_bytes()).await;
+        }
 
         let exchange_info = serde_json::from_str::<ExchangeInfo>(&res)?;
 
