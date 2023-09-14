@@ -249,8 +249,6 @@
 }
 ```
 
-
-
 ## 撤单
 
 完全未成交时的撤单和部分成交后的撤单，可通过`cummulative_qty`或`cummulative_vol`字段来区别，完全未成交时被撤单，这两个字段都是0值，成交过被撤单，这两个字段大于0。
@@ -320,6 +318,43 @@
 	maker: false,
 	order_create_time: 1642762849541,
 	cummulative_vol: 283.185,
+	last_vol: 0.0,
+	quote_order_qty: 0.0
+}
+```
+
+### IOC/FOK/ALGO订单的自动撤单
+
+```ruby
+{
+	symbol: "REQUSDT",
+	client_order_id: ClientOrderId("j9TWUmIrq2LxZJE8qNeNQM"),
+	side: Buy,
+	order_type: Limit,     # 限价买单
+	time_in_force: IOC,    # IOC类型(在指定价格上尽量多吃单成交，无法成交的部分自动撤单回退)
+	qty: 952.0,            # 挂单总数量
+	price: 0.063,          # 挂单价格
+	stop_price: 0.0,
+	delta: None,
+	iceberg_qty: 0.0,
+	order_list_id: -1,
+	orig_client_order_id: ClientOrderId(""),
+  # 如果IOC/FOK订单全部完成成交，order_action为Trade，order_status为Filled
+	order_action: Expired,  # Expired表示IOC订单已经自动撤单，意味着存在部分未成交而被回退
+	order_status: Expired,
+	reason: "NONE",
+	order_id: 134100942,
+	last_qty: 0.0,
+	cummulative_qty: 795.0,  # 实际成交的累计数量
+  cummulative_vol: 50.085, # 实际成交的累计交易额
+	last_price: 0.0,
+	fee_qty: 0.0,
+	fee_quote: None,
+	trade_time: 1694683376116,
+	trade_id: -1,
+	in_order_book: false,
+	maker: false,
+	order_create_time: 1694683376116,
 	last_vol: 0.0,
 	quote_order_qty: 0.0
 }

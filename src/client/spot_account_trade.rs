@@ -35,7 +35,9 @@ impl RestConn {
     }
 
     /// 现货下单接口  
+    ///
     /// side: 不区分大小的 buy/sell  
+    ///
     /// order_type: 订单类型，值为以下几种不区分大小写的值，不同类型的订单，强制要求提供的参数不同  
     ///   - Limit(限价单)  
     ///   - Market(市价单)  
@@ -46,11 +48,25 @@ impl RestConn {
     ///   - LimitMaker(限价只挂单)  
     ///
     /// time_in_force: 订单有效方式，不区分大小写的 gtc/ioc/fok  
+    ///
     /// qty: 币的数量  
+    ///
     /// quote_order_qty：市价单中，报价资产的数量。例如买入BTCUSDT时，表示买入多少USDT的BTC  
+    ///
     /// stop_price: 止盈止损单的止盈止损价  
+    ///
     /// iceberg_qty: Limit和LimitMaker单时指定该参数，表示变成冰山单，此时time_in_force必须为GTC类型  
-    /// new_order_resp_type: 指定下单后的响应信息的详细程度，值为不区分大小写的 ack/result/full  
+    ///
+    /// new_order_resp_type: 指定下单后的响应信息的详细程度，值为不区分大小写的 ack/result/full，
+    /// 对于不要求立即成交的订单来说，三者返回速度一样，
+    /// 对于要求立即成交的订单(如市价单、限价IOC单等)，ack最快，full最慢：  
+    /// 
+    /// - ack: 下单后(服务器生成订单信息)立即返回
+    /// 
+    /// - result: 下单后等待第一笔成交后返回 
+    /// 
+    /// - full：等待全部成交或订单过期(比如IOC单只能部分成交)时返回
+    ///
     /// 如果提供了qty、price、stop_price、iceberg_qty，则可能会自动调整值的大小以适配BiAn的数量和价格筛选器规则，quote_order_qty无需调整，它是市价单时使用，币安会自动计算实时价并调整  
     #[allow(clippy::too_many_arguments)]
     #[instrument(skip(self))]
@@ -63,7 +79,7 @@ impl RestConn {
         qty: Option<f64>,
         quote_order_qty: Option<f64>,
         price: Option<f64>,
-        new_client_order_id: Option<String>,
+        new_client_order_id: Option<&str>,
         stop_price: Option<f64>,
         iceberg_qty: Option<f64>,
         new_order_resp_type: Option<&str>,
@@ -99,12 +115,16 @@ impl RestConn {
         Ok(order_info)
     }
 
-    /// 限价单接口
+    /// (GTC)限价单接口
     /// side: 不区分大小写的 buy/sell
+    ///
     /// price: 买入或卖出的挂单价格
+    ///
     /// qty:
     ///   - 当side为买入时，表示买入报价资产的数量，将自动根据price参数的值转换为币的数量。例如要买入BTCUSDT，该数量表示要买入多少USDT的BTC
     ///   - 当side为卖出时，表示要卖出的币的数量
+    ///
+    /// cid: ClientOrderId
     #[instrument(skip(self))]
     pub async fn limit_order(
         &self,
@@ -112,8 +132,9 @@ impl RestConn {
         side: &str,
         qty: f64,
         price: f64,
+        cid: Option<&str>,
     ) -> BiAnResult<Order> {
-        let amount = if side.to_lowercase() == "sell" {
+        let amount = if side.eq_ignore_ascii_case("sell") {
             qty
         } else {
             // 转换为币的数量
@@ -128,7 +149,7 @@ impl RestConn {
                 Some(amount),
                 None,
                 Some(price),
-                None,
+                cid,
                 None,
                 None,
                 Some("Full"),
@@ -137,23 +158,92 @@ impl RestConn {
         Ok(order)
     }
 
-    /// 限价单接口
+    /// (IOC)限价单接口
+    /// 
+    /// IOC限价单：
+    /// 
+    /// - 如果指定的价格不能立即成交，则挂单操作立即过期  
+    /// - 如果指定的价格能立即完全成交，则挂单操作立即吃单并完成成交  
+    /// - 如果指定的价格能立即部分成交，则挂单操作立即吃单能成交的部分，
+    ///   吃完可成交的单后，剩余无法立即成交的单立即过期
+    /// 
+    /// 参数：
+    /// 
     /// side: 不区分大小写的 buy/sell
+    ///
+    /// price: 买入或卖出的挂单价格
+    ///
+    /// qty:
+    ///   - 当side为买入时，表示买入报价资产的数量，将自动根据price参数的值转换为币的数量。例如要买入BTCUSDT，该数量表示要买入多少USDT的BTC
+    ///   - 当side为卖出时，表示要卖出的币的数量
+    ///
+    /// cid: ClientOrderId
+    #[instrument(skip(self))]
+    pub async fn limit_order_ioc(
+        &self,
+        symbol: &str,
+        side: &str,
+        qty: f64,
+        price: f64,
+        cid: Option<&str>,
+    ) -> BiAnResult<Order> {
+        let amount = if side.eq_ignore_ascii_case("sell") {
+            qty
+        } else {
+            // 转换为币的数量
+            qty / price
+        };
+        let order = self
+            .order(
+                symbol,
+                side,
+                "limit",
+                Some("ioc"),
+                Some(amount),
+                None,
+                Some(price),
+                cid,
+                None,
+                None,
+                Some("Full"),
+            )
+            .await?;
+        Ok(order)
+    }
+
+
+    /// 限价单接口
+    ///
+    /// side: 不区分大小写的 buy/sell
+    ///
     /// qty:
     ///   - 当side为买入时，表示买入报价资产的数量。例如要买入BTCUSDT，该数量表示要买入多少USDT的BTC
     ///   - 当side为卖出时，表示要卖出的币的数量
+    ///
+    /// cid: ClientOrderId
     #[instrument(skip(self))]
-    pub async fn market_order(&self, symbol: &str, side: &str, qty: f64) -> BiAnResult<Order> {
+    pub async fn market_order(
+        &self,
+        symbol: &str,
+        side: &str,
+        qty: f64,
+        cid: Option<&str>,
+    ) -> BiAnResult<Order> {
+        let (qty, quote_qty) = if side.eq_ignore_ascii_case("sell") {
+            (Some(qty), None)
+        } else {
+            (None, Some(qty))
+        };
         let order = self
             .order(
                 symbol,
                 side,
                 "market",
                 None,
+                qty,
+                quote_qty,
                 None,
-                Some(qty),
-                None,
-                None,
+                cid,
                 None,
                 None,
                 Some("Full"),
@@ -169,12 +259,11 @@ impl RestConn {
         &self,
         symbol: &str,
         order_id: Option<u64>,
-        orig_client_order_id: Option<&str>,
-        new_client_order_id: Option<&str>,
+        orig_cid: Option<&str>,
+        new_cid: Option<&str>,
     ) -> BiAnResult<CancelOrderInfo> {
         let path = "/api/v3/order";
-        let params =
-            PCancelOrder::new(symbol, order_id, orig_client_order_id, new_client_order_id)?;
+        let params = PCancelOrder::new(symbol, order_id, orig_cid, new_cid)?;
         let res = self
             .rest_req("delete", path, params, RateLimitParam::Weight(1))
             .await?;

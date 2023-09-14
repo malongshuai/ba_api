@@ -194,7 +194,7 @@ impl WsClient {
     /// 列出订阅内容，可用于检查是否订阅成功.
     /// 向通道发送信息，查看订阅结果，通道会响应id和result字段
     /// id参数随意，响应中的id字段总是和该给定的id相同
-    pub async fn list_sub(&self, id: u64) {
+    pub async fn list_subscribers(&self, id: u64) {
         self.ws.list_sub(id).await;
     }
 
@@ -367,11 +367,12 @@ impl WsClient {
     // }
 
     /// 以ws_client的方式订阅"有限档深度信息"(将"阻塞"当前异步任务)  
-    /// 每100毫秒推送有限档深度信息。level表示几档买卖单信息, 可选5/10/20档  
+    /// 每100毫秒推送有限档深度信息。level表示几档买卖单信息, 可选5/10/20档，
+    /// 档数表示返回结果中包含几个挂单信息，5档表示返回最新的5个买盘和5个卖盘挂单信息，  
     /// symbols参数忽略大小写  
     pub async fn depth_with_level(symbols: Vec<String>, level: u8) -> BiAnResult<Self> {
         if ![5u8, 10u8, 20u8].contains(&level) {
-            panic!("argument error: <{}> is not the valid depth level", level)
+            panic!("argument error: <{}> level is invalid", level)
         }
         let symbols: Vec<String> = symbols.iter().map(|x| x.to_lowercase()).collect();
         let channel = format!("depth{}@100ms", level);

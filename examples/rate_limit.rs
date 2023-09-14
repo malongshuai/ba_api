@@ -74,7 +74,7 @@ async fn f(rest_conn: RestConn) {
 #[allow(dead_code)]
 async fn order(rest_conn: RestConn) {
     let res = rest_conn
-        .limit_order("BTCUSDT", "buy", 20.0, 26000.0)
+        .limit_order("BTCUSDT", "buy", 20.0, 26000.0, None)
         .await
         .unwrap();
     println!("{:?}", res);
