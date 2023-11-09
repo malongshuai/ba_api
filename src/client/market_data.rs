@@ -104,11 +104,11 @@ impl RestConn {
 
         let rate_limit = match limit {
             Some(n) => match n {
-                1..=100 => 2,
-                101..=500 => 10,
-                501..=1000 => 20,
-                1001..=5000 => 100,
-                _ => 100,
+                1..=100 => 5,
+                101..=500 => 25,
+                501..=1000 => 50,
+                1001..=5000 => 250,
+                _ => 250,
             },
             None => 2,
         };
@@ -127,7 +127,7 @@ impl RestConn {
         let path = "/api/v3/trades";
         let params = PTrades::new(symbol, limit)?;
         let res = self
-            .rest_req("get", path, params, RateLimitParam::Weight(2))
+            .rest_req("get", path, params, RateLimitParam::Weight(10))
             .await?;
         let trades = serde_json::from_str::<Vec<Trade>>(&res)?;
         Ok(trades)
