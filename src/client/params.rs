@@ -633,6 +633,15 @@ impl Param for PAllOrders {
     }
 }
 
+/// 现货交易对下架计划
+#[derive(Debug, Serialize)]
+pub struct PDelist;
+impl Param for PDelist {
+    fn check_type(&self) -> CheckType {
+        CheckType::MarketData
+    }
+}
+
 /// 账户信息
 #[derive(Debug, Serialize)]
 pub struct PAccount;

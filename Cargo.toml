@@ -16,7 +16,7 @@ ba_types = { path = "../../ba_types", features = [
 chrono_ext = { path = "../../chrono_ext" }
 reqwest = { version = "0.11.16", features = ["json", "socks"] }
 ring = { version = "0.16" }
-tokio = { version = "=1.26", features = ["net", "fs", "time", "sync", "macros"] }
+tokio = { version = "1.31", features = ["net", "fs", "time", "sync", "macros"] }
 tokio-tungstenite = { version = "0.20", features = ["native-tls"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

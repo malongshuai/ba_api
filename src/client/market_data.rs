@@ -1,6 +1,5 @@
+use super::{params::PDelist, rate_limit::RateLimitParam};
 use crate::app_dir;
-
-use super::rate_limit::RateLimitParam;
 use {
     super::{
         params::{
@@ -13,7 +12,7 @@ use {
     crate::types::depth::Depth,
     crate::types::order::{AggTrade, HistoricalTrade, Trade},
     crate::types::other_types::{AvgPrice, Prices, ServerTime},
-    crate::types::symbol_info::ExchangeInfo,
+    crate::types::symbol_info::{DelistInfos, ExchangeInfo},
     crate::types::ticker::{BookTickers, FullTickers},
     crate::{KLineInterval, KLines},
     std::{error, path::Path, time::SystemTime},
@@ -282,5 +281,16 @@ impl RestConn {
             .await?;
         let tickers = serde_json::from_str::<BookTickers>(&res)?;
         Ok(tickers)
+    }
+
+    /// 查询现货下架计划(下架交易对列表)
+    #[instrument(skip(self))]
+    pub async fn delist_schedule(&self) -> BiAnResult<DelistInfos> {
+        let path = "/sapi/v1/spot/delist-schedule";
+        let res = self
+            .rest_req("get", path, PDelist, RateLimitParam::Weight(100))
+            .await?;
+        let infos = serde_json::from_str::<DelistInfos>(&res)?;
+        Ok(infos)
     }
 }

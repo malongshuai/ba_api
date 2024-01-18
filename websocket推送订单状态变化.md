@@ -277,7 +277,7 @@
 	last_price: 0.0,
 	fee_qty: 0.0,
 	fee_quote: None,
-	trade_time: 1642762616972,
+	trade_time: 1642762616972,  # 撤单时间
 	trade_id: -1,
 	in_order_book: false,
 	maker: false,
