@@ -91,6 +91,8 @@ struct OfflineMessage {
 ///
 /// 如果确实要下架，返回Ok(Some(Epoch))，Epoch是毫秒级，表示下架时间点。
 /// 返回Err表示请求错误，返回Ok(None)表示不下架或请求的交易对名称不对
+///
+/// 也可以通过rest_conn的`delist_schedule()`方法来判断
 pub async fn check_offline(sym: &str) -> BiAnResult<Option<u64>> {
     let sym = sym.to_uppercase();
     let base_url =
