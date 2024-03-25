@@ -217,14 +217,22 @@ impl RestConn {
             CheckType::Trade | CheckType::Margin | CheckType::UserData => {
                 let mut query = serde_urlencoded::to_string(params).unwrap();
                 let time_query = format!("recvWindow=5000&timestamp={}", helper::timestamp());
-                query = if query.is_empty() {
-                    time_query
-                } else {
-                    format!("{}&{}", query, time_query)
-                };
+                // 根据采用的算法不同，signature可能会比较长
+                query.reserve(400);
+                if !query.is_empty() {
+                    query.push('&');
+                }
+                query.push_str(&time_query);
+                // query = if query.is_empty() {
+                //     time_query
+                // } else {
+                //     format!("{}&{}", query, time_query)
+                // };
 
                 let signature = helper::signature(&self.sec_key, &query);
-                query = format!("{}&signature={}", query, signature);
+                // query = format!("{}&signature={}", query, signature);
+                query.push_str("&signature=");
+                query.push_str(&signature);
                 url.set_query(Some(&query));
             }
         };

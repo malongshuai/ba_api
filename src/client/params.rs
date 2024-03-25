@@ -250,9 +250,9 @@ impl PAggTrades<'_> {
                 }
             }
             _ => {
-                return Err(BiAnApiError::ArgumentError(
-                    "invalid start_time or end_time".to_string(),
-                ))
+                return Err(BiAnApiError::ArgumentError(String::from(
+                    "invalid start_time or end_time",
+                )))
             }
         }
 
@@ -332,7 +332,7 @@ impl PPrice {
     pub fn new(symbols: Vec<&str>) -> Self {
         if symbols.len() == 1 {
             Self {
-                symbol: Some(symbols[0].to_string()),
+                symbol: Some(symbols[0].into()),
                 symbols: None,
             }
         } else {
@@ -354,7 +354,7 @@ impl PBookTicker {
     pub fn new(symbols: Vec<&str>) -> Self {
         if symbols.len() == 1 {
             Self {
-                symbol: Some(symbols[0].to_string()),
+                symbol: Some(symbols[0].into()),
                 symbols: None,
             }
         } else {
@@ -378,7 +378,7 @@ impl PHr24 {
     pub fn new(symbols: Vec<&str>) -> Self {
         if symbols.len() == 1 {
             Self {
-                symbol: Some(symbols[0].to_string()),
+                symbol: Some(symbols[0].into()),
                 symbols: None,
             }
         } else {
@@ -480,7 +480,7 @@ impl POrder {
             qty: qty.map(|x| x.to_string()),
             quote_order_qty: quote_order_qty.map(|x| x.to_string()),
             price: price.map(|x| x.to_string()),
-            new_client_order_id: new_client_order_id.map(|x| x.to_string()),
+            new_client_order_id: new_client_order_id.map(String::from),
             stop_price: stop_price.map(|x| x.to_string()),
             iceberg_qty: iceberg_qty.map(|x| x.to_string()),
             new_order_resp_type: new_order_resp_type.map(OrderRespType::from),
@@ -516,15 +516,15 @@ impl PCancelOrder {
     ) -> BiAnResult<PCancelOrder> {
         if let (None, None) = (order_id, orig_client_order_id) {
             return Err(BiAnApiError::ArgumentError(
-                "must provide one of `order_id` and `orig_client_order_id`".to_string(),
+                "must provide one of `order_id` and `orig_client_order_id`".into(),
             ));
         }
 
         Ok(PCancelOrder {
             symbol: symbol.to_uppercase(),
             order_id,
-            orig_client_order_id: orig_client_order_id.map(|v| v.to_string()),
-            new_client_order_id: new_client_order_id.map(|v| v.to_string()),
+            orig_client_order_id: orig_client_order_id.map(String::from),
+            new_client_order_id: new_client_order_id.map(String::from),
         })
     }
 }
@@ -569,13 +569,13 @@ impl PGetOrder {
     ) -> BiAnResult<PGetOrder> {
         if let (None, None) = (order_id, orig_client_order_id) {
             return Err(BiAnApiError::ArgumentError(
-                "must provide one of `order_id` and `orig_client_order_id`".to_string(),
+                "must provide one of `order_id` and `orig_client_order_id`".into(),
             ));
         }
         Ok(PGetOrder {
             symbol: symbol.to_uppercase(),
             order_id,
-            orig_client_order_id: orig_client_order_id.map(|v| v.to_string()),
+            orig_client_order_id: orig_client_order_id.map(String::from),
         })
     }
 }
@@ -703,8 +703,8 @@ pub struct PListenKey {
 impl PListenKey {
     pub fn new(listen_key: Option<&str>, symbol: Option<&str>) -> Self {
         Self {
-            listen_key: listen_key.map(|x| x.to_string()),
-            symbol: symbol.map(|x| x.to_string()),
+            listen_key: listen_key.map(String::from),
+            symbol: symbol.map(String::from),
         }
     }
 }
@@ -826,7 +826,7 @@ impl<'a> PSubAccountUniversalTransfer<'a> {
     ) -> BiAnResult<Self> {
         if from_email.is_none() && to_email.is_none() {
             return Err(BiAnApiError::ArgumentError(
-                "both of from_email and to_email are missing".to_string(),
+                "both of from_email and to_email are missing".into(),
             ));
         }
         Ok(Self {

@@ -49,16 +49,16 @@ impl WS {
             // 无效的参数
             (true, false) => panic!("invalid subscribe url"),
             // 空的等待手动订阅的ws连接
-            (true, true) => format!("{}/stream", base_url),
+            (true, true) => concat_string!(base_url, "/stream"),
             // 订阅账户信息(使用listenKey)的ws连接
-            (false, true) => format!("{}/stream?streams={}", base_url, channel),
+            (false, true) => concat_string!(base_url, "/stream?streams=", channel),
             // 建立连接并立即订阅行情信息的ws连接
             (false, false) => {
                 let metadata = names
                     .iter()
-                    .map(|sym| format!("{}@{}", sym, channel))
+                    .map(|sym| concat_string!(sym, "@", channel))
                     .collect::<Vec<String>>();
-                format!("{}/stream?streams={}", base_url, metadata.join("/"))
+                concat_string!(base_url, "/stream?streams=", metadata.join("/"))
             }
         }
         // let streams = if name.is_empty() {
@@ -81,7 +81,7 @@ impl WS {
         }
 
         let base_url = WS_BASE_URL;
-        let names: Vec<String> = names.iter().map(|x| x.to_string()).collect();
+        let names: Vec<String> = names.iter().map(|x| x.into()).collect();
         let url = Self::make_ws_url(channel, &names, base_url);
 
         let (ws_stream, _response) = connect_async(&url).await?;
@@ -91,7 +91,7 @@ impl WS {
             ws_reader: RwLock::new(ws_reader),
             ws_writer: RwLock::new(ws_writer),
             names,
-            channel: channel.to_string(),
+            channel: channel.into(),
             url,
         })
     }
@@ -358,7 +358,7 @@ impl WsClient {
     /// 以ws_client的方式订阅"全市场所有Symbol的精简Ticker"(将"阻塞"当前异步任务)  
     /// 推送所有交易对的最近24小时精简ticker信息.需注意，只有更新的ticker才会被推送
     pub async fn all_mini_ticker() -> BiAnResult<Self> {
-        Self::new("arr", vec!["!miniTicker".to_string()]).await
+        Self::new("arr", vec!["!miniTicker".into()]).await
     }
 
     /// 以ws_client的方式订阅"按symbol的完整Ticker"(将"阻塞"当前异步任务)  
@@ -372,7 +372,7 @@ impl WsClient {
     /// 以ws_client的方式订阅"全市场所有Symbol的完整Ticker"(将"阻塞"当前异步任务)  
     /// 推送所有交易对的最近24小时完整ticker信息.需注意，只有更新的ticker才会被推送
     pub async fn all_ticker() -> BiAnResult<Self> {
-        Self::new("arr", vec!["!ticker".to_string()]).await
+        Self::new("arr", vec!["!ticker".into()]).await
     }
 
     /// 以ws_client的方式订阅"按Symbol的最优挂单信息"(将"阻塞"当前异步任务)  

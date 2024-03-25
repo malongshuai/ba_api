@@ -2,6 +2,7 @@ use crate::{
     errors::{BiAnApiError, BiAnResult},
     KLineInterval, WS_BASE_URL,
 };
+use concat_string::concat_string;
 use futures_util::{
     stream::{SplitSink, SplitStream},
     SinkExt, StreamExt,
@@ -40,7 +41,7 @@ impl ChannelPath {
     fn to_path(&self) -> String {
         match self {
             Self::MarketPath(s) => Vec::from_iter(s.iter().map(|x| x.as_str())).join("/"),
-            Self::ListenKey(l) => l.to_string(),
+            Self::ListenKey(l) => l.into(),
         }
     }
 
@@ -99,14 +100,16 @@ impl WS {
     fn make_ws_url(channel_path: &ChannelPath) -> String {
         let path = channel_path.to_path();
         if !path.is_empty() {
-            format!("{}/stream?streams={}", WS_BASE_URL, path)
+            concat_string!(WS_BASE_URL, "/stream?streams=", path)
+            // format!("{}/stream?streams={}", WS_BASE_URL, path)
         } else {
-            format!("{}/stream", WS_BASE_URL)
+            concat_string!(WS_BASE_URL, "/stream", path)
+            // format!("{}/stream", WS_BASE_URL)
         }
     }
 
     async fn channel_path(&self) -> String {
-        self.channel_path.read().await.to_path().to_string()
+        self.channel_path.read().await.to_path()
     }
 
     /// 建立ws连接，并处理返回数据  
@@ -429,7 +432,7 @@ impl WsClient {
         // channel: <sym>@aggTrade
         let channel_path = symbols
             .iter()
-            .map(|sym| format!("{}@aggTrade", sym.to_lowercase()))
+            .map(|sym| concat_string!(sym.to_ascii_lowercase(), "@aggTrade"))
             .collect::<HashSet<String>>();
         Self::new(ChannelPath::market_path(channel_path), data_sender).await
     }
@@ -444,7 +447,7 @@ impl WsClient {
         // channel: <sym>@trade
         let channel_path = symbols
             .iter()
-            .map(|sym| format!("{}@trade", sym.to_lowercase()))
+            .map(|sym| concat_string!(sym.to_ascii_lowercase(), "@trade"))
             .collect::<HashSet<String>>();
         Self::new(ChannelPath::market_path(channel_path), data_sender).await
     }
@@ -464,7 +467,7 @@ impl WsClient {
         // channel: kline_<interval>
         let channel_path = symbols
             .iter()
-            .map(|sym| format!("{}@kline_{}", sym.to_lowercase(), interval))
+            .map(|sym| concat_string!(sym.to_ascii_lowercase(), "@kline_", interval))
             .collect::<HashSet<String>>();
 
         Self::new(ChannelPath::market_path(channel_path), data_sender).await
@@ -480,7 +483,7 @@ impl WsClient {
         // channel: <sym>@miniTicker
         let channel_path = symbols
             .iter()
-            .map(|sym| format!("{}@miniTicker", sym.to_lowercase()))
+            .map(|sym| concat_string!(sym.to_ascii_lowercase(), "@miniTicker"))
             .collect::<HashSet<String>>();
         Self::new(ChannelPath::market_path(channel_path), data_sender).await
     }
@@ -491,7 +494,7 @@ impl WsClient {
         data_sender: mpsc::Sender<String>,
     ) -> BiAnResult<(Self, JoinHandle<()>)> {
         // channel: !miniTicker@arr
-        let channel_path = HashSet::from(["!miniTicker@arr".to_string()]);
+        let channel_path = HashSet::from(["!miniTicker@arr".into()]);
         Self::new(ChannelPath::market_path(channel_path), data_sender).await
     }
 
@@ -505,7 +508,7 @@ impl WsClient {
         // channel: <sym>@ticker
         let channel_path = symbols
             .iter()
-            .map(|sym| format!("{}@ticker", sym.to_lowercase()))
+            .map(|sym| concat_string!(sym.to_ascii_lowercase(), "@ticker"))
             .collect::<HashSet<String>>();
         Self::new(ChannelPath::market_path(channel_path), data_sender).await
     }
@@ -516,7 +519,7 @@ impl WsClient {
         data_sender: mpsc::Sender<String>,
     ) -> BiAnResult<(Self, JoinHandle<()>)> {
         // channel: !ticker@arr
-        let channel_path = HashSet::from(["!ticker@arr".to_string()]);
+        let channel_path = HashSet::from(["!ticker@arr".into()]);
         Self::new(ChannelPath::market_path(channel_path), data_sender).await
     }
 
@@ -530,7 +533,7 @@ impl WsClient {
         // channel: <sym>@bookTicker
         let channel_path = symbols
             .iter()
-            .map(|sym| format!("{}@bookTicker", sym.to_lowercase()))
+            .map(|sym| concat_string!(sym.to_ascii_lowercase(), "@bookTicker"))
             .collect::<HashSet<String>>();
         Self::new(ChannelPath::market_path(channel_path), data_sender).await
     }
@@ -552,7 +555,15 @@ impl WsClient {
 
         let channel_path = symbols
             .iter()
-            .map(|sym| format!("{}@depth{}@100ms", sym.to_lowercase(), level))
+            .map(|sym| {
+                concat_string!(
+                    sym.to_ascii_lowercase(),
+                    "@depth",
+                    level.to_string(),
+                    "@100ms"
+                )
+            })
+            // .map(|sym| format!("{}@depth{}@100ms", sym.to_lowercase(), level))
             .collect::<HashSet<String>>();
 
         Self::new(ChannelPath::market_path(channel_path), data_sender).await
@@ -568,7 +579,7 @@ impl WsClient {
         // channel: <symbol>@depth 或 <symbol>@depth@100ms
         let channel_path = symbols
             .iter()
-            .map(|sym| format!("{}@depth@100ms", sym.to_lowercase()))
+            .map(|sym| concat_string!(sym.to_ascii_lowercase(), "@@depth@100ms"))
             .collect::<HashSet<String>>();
 
         Self::new(ChannelPath::market_path(channel_path), data_sender).await

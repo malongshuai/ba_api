@@ -204,7 +204,7 @@ impl RestConn {
         let mut klines = serde_json::from_str::<KLines>(&res)?;
 
         for kl in &mut klines {
-            kl.symbol = symbol.to_string();
+            kl.symbol = symbol.into();
             kl.interval = KLineInterval::from(interval);
         }
 

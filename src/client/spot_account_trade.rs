@@ -60,11 +60,11 @@ impl RestConn {
     /// new_order_resp_type: 指定下单后的响应信息的详细程度，值为不区分大小写的 ack/result/full，
     /// 对于不要求立即成交的订单来说，三者返回速度一样，
     /// 对于要求立即成交的订单(如市价单、限价IOC单等)，ack最快，full最慢：  
-    /// 
+    ///
     /// - ack: 下单后(服务器生成订单信息)立即返回
-    /// 
-    /// - result: 下单后等待第一笔成交后返回 
-    /// 
+    ///
+    /// - result: 下单后等待第一笔成交后返回
+    ///
     /// - full：等待全部成交或订单过期(比如IOC单只能部分成交)时返回
     ///
     /// 如果提供了qty、price、stop_price、iceberg_qty，则可能会自动调整值的大小以适配BiAn的数量和价格筛选器规则，quote_order_qty无需调整，它是市价单时使用，币安会自动计算实时价并调整  
@@ -152,23 +152,23 @@ impl RestConn {
                 cid,
                 None,
                 None,
-                Some("Full"),
+                Some("ACK"),
             )
             .await?;
         Ok(order)
     }
 
     /// (IOC)限价单接口
-    /// 
+    ///
     /// IOC限价单：
-    /// 
+    ///
     /// - 如果指定的价格不能立即成交，则挂单操作立即过期  
     /// - 如果指定的价格能立即完全成交，则挂单操作立即吃单并完成成交  
     /// - 如果指定的价格能立即部分成交，则挂单操作立即吃单能成交的部分，
     ///   吃完可成交的单后，剩余无法立即成交的单立即过期
-    /// 
+    ///
     /// 参数：
-    /// 
+    ///
     /// side: 不区分大小写的 buy/sell
     ///
     /// price: 买入或卖出的挂单价格
@@ -205,12 +205,11 @@ impl RestConn {
                 cid,
                 None,
                 None,
-                Some("Full"),
+                Some("ACK"),
             )
             .await?;
         Ok(order)
     }
-
 
     /// 限价单接口
     ///
@@ -246,7 +245,7 @@ impl RestConn {
                 cid,
                 None,
                 None,
-                Some("Full"),
+                Some("ACK"),
             )
             .await?;
         Ok(order)
@@ -306,7 +305,7 @@ impl RestConn {
     pub async fn get_open_orders(&self, symbol: Option<&str>) -> BiAnResult<Vec<OrderInfo>> {
         let path = "/api/v3/openOrders";
         let (sym, rate_limit) = match symbol {
-            Some(s) => (Some(s.to_string()), 6),
+            Some(s) => (Some(String::from(s)), 6),
             None => (None, 80),
         };
         let params = PGetOpenOrders::new(sym);
