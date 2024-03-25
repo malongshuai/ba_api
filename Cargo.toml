@@ -27,7 +27,6 @@ serde_urlencoded = "0.7"
 futures-util = "0.3"
 # dashmap = "5.4"
 concat-string = "1"
-lazy_static ={ version = "1.4"}
 
 [dev-dependencies]
 tokio = { version = "1.21", features = ["full"] }

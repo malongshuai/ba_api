@@ -32,14 +32,3 @@ pub use rest::*;
 #[cfg(feature = "websocket")]
 pub use websocket::*;
 
-use lazy_static::lazy_static;
-
-lazy_static! {
-    // /// 如果到了2023-08-25T00:00:00+00:00，则设置权重乘法为2
-    // /// 用于更新
-    // static ref WEIGHT_TIME: usize = {
-    //     let dt = NaiveDate::from_ymd_opt(2023, 8, 25).unwrap();
-    //     let today0 = now0().date_naive();
-    //     (today0 >= dt) as usize + 1
-    // };
-}
