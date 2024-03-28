@@ -5,6 +5,7 @@ pub mod misc;
 pub use ba_types::*;
 pub use chrono_ext::*;
 pub use misc::*;
+
 use std::path::PathBuf;
 
 /// Rest接口的BASE URL
@@ -19,7 +20,7 @@ pub fn app_dir() -> Result<PathBuf, Box<dyn std::error::Error>> {
     std::fs::create_dir_all(&path)?;
     Ok(path)
 }
-/// 运行时目录($HOME/bian)
+/// 运行时目录($HOME/ba_app/bian)
 pub fn runtime_dir() -> Result<PathBuf, Box<dyn std::error::Error>> {
     let path = app_dir()?.join("bian");
     std::fs::create_dir_all(&path)?;
