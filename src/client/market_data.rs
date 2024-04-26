@@ -126,7 +126,7 @@ impl RestConn {
         let path = "/api/v3/trades";
         let params = PTrades::new(symbol, limit)?;
         let res = self
-            .rest_req("get", path, params, RateLimitParam::Weight(10))
+            .rest_req("get", path, params, RateLimitParam::Weight(25))
             .await?;
         let trades = serde_json::from_str::<Vec<Trade>>(&res)?;
         Ok(trades)
@@ -143,7 +143,7 @@ impl RestConn {
         let path = "/api/v3/historicalTrades";
         let params = PHistoricalTrades::new(symbol, limit, from_id)?;
         let res = self
-            .rest_req("get", path, params, RateLimitParam::Weight(10))
+            .rest_req("get", path, params, RateLimitParam::Weight(25))
             .await?;
         let historical_trades = serde_json::from_str::<Vec<HistoricalTrade>>(&res)?;
         Ok(historical_trades)

@@ -94,11 +94,16 @@ struct OfflineMessage {
 ///
 /// 也可以通过rest_conn的`delist_schedule()`方法来判断
 pub async fn check_offline(sym: &str) -> BiAnResult<Option<u64>> {
-    let sym = sym.to_uppercase();
-    let base_url =
-        "https://www.binance.com/bapi/asset/v2/public/asset-service/product/get-product-by-symbol";
+    let sym = sym.to_ascii_uppercase();
 
-    let url = format!("{}?symbol={}", base_url, sym);
+    let mut url = String::from(
+        "https://www.binance.com/bapi/asset/v2/public/asset-service/product/get-product-by-symbol",
+    );
+    url.reserve(18);
+    url.push_str("?symbol=");
+    url.push_str(&sym);
+
+    // let url = format!("{}?symbol={}", url, sym);
 
     let client = reqwest::Client::new();
     let res = client.get(url).send().await?.json::<OfflineInfo>().await?;

@@ -25,7 +25,7 @@ impl RestConn {
     #[instrument(skip(self))]
     pub async fn account(&self) -> BiAnResult<Account> {
         let path = "/api/v3/account";
-        let params = PAccount;
+        let params = PAccount::new(Some(true));
         let rate_limit = 20;
         let res = self
             .rest_req("get", path, params, RateLimitParam::Weight(rate_limit))

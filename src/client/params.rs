@@ -644,7 +644,15 @@ impl Param for PDelist {
 
 /// 账户信息
 #[derive(Debug, Serialize)]
-pub struct PAccount;
+#[serde(rename_all = "camelCase")]
+pub struct PAccount {
+    omit_zero_balances: Option<bool>,
+}
+impl PAccount {
+    pub fn new(omit_zero_balances: Option<bool>) -> Self {
+        Self { omit_zero_balances }
+    }
+}
 impl Param for PAccount {
     fn check_type(&self) -> CheckType {
         CheckType::UserData
