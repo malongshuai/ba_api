@@ -1,5 +1,5 @@
 use super::{
-    params::{PSubAccountAssets, PSubAccountList, PSubAccountUniversalTransfer},
+    params::{PAccountInfo, PSubAccountAssets, PSubAccountList, PSubAccountUniversalTransfer},
     rate_limit::RateLimitParam,
     RestConn,
 };
@@ -8,6 +8,7 @@ use crate::{
     types::sub_account::{SubAccountBalances, SubAccounts, UniversalTransfer},
     Balances,
 };
+use ba_types::types::sub_account::AccountInfo;
 use tracing::instrument;
 
 /// 字母账户相关接口
@@ -95,5 +96,16 @@ impl RestConn {
     ) -> BiAnResult<UniversalTransfer> {
         self.sub_account_univ_trans(from_email, to_email, "spot", "spot", asset, amount, None)
             .await
+    }
+
+    /// 获取账户信息(VIP等级、是否开启杠杆帐户 及 是否开启合约帐户)
+    #[instrument(skip(self))]
+    pub async fn account_info(&self) -> BiAnResult<AccountInfo> {
+        let path = "/sapi/v1/account/info";
+        let res = self
+            .rest_req("get", path, PAccountInfo, RateLimitParam::Weight(1))
+            .await?;
+        let account_info = serde_json::from_str::<AccountInfo>(&res)?;
+        Ok(account_info)
     }
 }

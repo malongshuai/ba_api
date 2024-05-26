@@ -856,3 +856,14 @@ impl Param for PSubAccountUniversalTransfer<'_> {
         PRateLimit::ApiUid
     }
 }
+
+#[derive(Debug, Serialize)]
+pub struct PAccountInfo;
+impl Param for PAccountInfo {
+    fn check_type(&self) -> CheckType {
+        CheckType::UserData
+    }
+    fn rate_limit(&self) -> PRateLimit {
+        PRateLimit::ApiUid
+    }
+}
