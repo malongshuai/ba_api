@@ -12,6 +12,7 @@ use std::path::PathBuf;
 pub const REST_BASE_URL: &str = "https://api.binance.com";
 /// WebSocket接口的BASE URL
 pub const WS_BASE_URL: &str = "wss://stream.binance.com:9443";
+pub const WS_BASE_URL1: &str = "wss://stream.binance.com:443";
 
 /// 程序目录($HOME/ba_app)
 pub fn app_dir() -> Result<PathBuf, Box<dyn std::error::Error>> {

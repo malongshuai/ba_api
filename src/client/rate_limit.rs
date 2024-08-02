@@ -90,7 +90,7 @@ impl Default for RestApiRateLimitsInner {
             rate_limit_type: RateLimitType::Orders,
             interval: RateLimitInterVal::Second,
             interval_num: 10,
-            limit: 50,
+            limit: 100,
             count: 0,
         };
 
