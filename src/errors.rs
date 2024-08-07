@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::{fmt::Display, io};
 use thiserror::Error;
+#[cfg(feature = "websocket")]
 use tokio_tungstenite::tungstenite;
 
 #[derive(Debug, Error)]
@@ -39,6 +40,7 @@ pub enum BiAnApiError {
     ArgumentError(String),
 
     /// ws错误
+    #[cfg(feature = "websocket")]
     #[error(transparent)]
     WsError(#[from] tungstenite::error::Error),
 

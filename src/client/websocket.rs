@@ -136,6 +136,10 @@ impl WS {
         })
     }
 
+    // fn tls_connector() {
+
+    // }
+
     /// 创建一个新的WebSocketStream，并将其替换该ws连接内部已有的WebSocketStream  
     async fn replace_inner_stream(&self) {
         let dur = Duration::from_millis(500);
