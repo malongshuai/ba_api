@@ -133,7 +133,7 @@ impl RestConn {
             exchange_info: Arc::new(None),
         };
 
-        match rest_conn.exchange_info(None).await {
+        match rest_conn.exchange_info().await {
             Ok(exchange_info) => rest_conn.exchange_info = Arc::new(Some(exchange_info)),
             Err(e) => error!("get exchange_info failed: {}", e),
         }
@@ -150,7 +150,7 @@ impl RestConn {
 
     /// 更新exchange_info信息
     pub async fn update_exchange_info(&mut self) -> BiAnResult<()> {
-        match self.exchange_info(None).await {
+        match self.exchange_info().await {
             Ok(exchange_info) => {
                 self.exchange_info = Arc::new(Some(exchange_info));
                 Ok(())

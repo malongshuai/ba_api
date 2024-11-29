@@ -1,4 +1,9 @@
-use super::{params::PDelist, rate_limit::RateLimitParam};
+use ba_types::Permission;
+
+use super::{
+    params::{PCapital, PDelist},
+    rate_limit::RateLimitParam,
+};
 use crate::app_dir;
 use {
     super::{
@@ -12,7 +17,7 @@ use {
     crate::types::depth::Depth,
     crate::types::order::{AggTrade, HistoricalTrade, Trade},
     crate::types::other_types::{AvgPrice, Prices, ServerTime},
-    crate::types::symbol_info::{DelistInfos, ExchangeInfo},
+    crate::types::symbol_info::{DelistSchedule, ExchangeInfo},
     crate::types::ticker::{BookTickers, FullTickers},
     crate::{KLineInterval, KLines},
     std::{error, path::Path, time::SystemTime},
@@ -62,17 +67,20 @@ impl RestConn {
 
     /// 获取交易对信息
     /// ```rust
-    /// // 获取所有交易对信息
-    /// rest_conn.exchange_info(None);
-    /// rest_conn.exchange_info(Some(vec![]));
-    ///
-    /// // 获取一个或多个交易堆信息
-    /// rest_conn.exchange_info(Some(vec!["BTCUSDT"]));
+    /// // 获取所有现货交易对的信息
+    /// rest_conn.exchange_info();
     /// ```
+    ///
+    /// 注意，为了减小响应体积，关闭了响应中的权限字段permissionSets字段的显示，
+    /// 但该方法默认获取的均为Spot现货交易对，并且手动添加到permissionSets字段，
+    /// 如果该现货交易对同时支持Margin杠杆交易，则也会将该权限手动追加到permissionSets字段，
+    ///
+    /// 因此，该方法获取所有现货交易对，其中一部分可能还同时支持Margin交易
     #[instrument(skip(self))]
-    pub async fn exchange_info(&self, symbols: Option<Vec<&str>>) -> BiAnResult<ExchangeInfo> {
+    pub async fn exchange_info(&self) -> BiAnResult<ExchangeInfo> {
         let path = "/api/v3/exchangeInfo";
-        let params = PExchangeInfo::new(symbols);
+        let permission = Permission::Spot;
+        let params = PExchangeInfo::new(permission);
 
         // 如果本地文件已有exchange_info的信息，且文件的mtime在半小时以内，则从本地文件读取数据并返回，否则请求新数据并写入本地文件
         let bian_dir = app_dir().unwrap().join("bian");
@@ -87,11 +95,34 @@ impl RestConn {
         let res = self
             .rest_req("get", path, params, RateLimitParam::Weight(20))
             .await?;
-        if c_res.is_ok() {
-            let _ = fs::write(&exchange_info_file, res.as_bytes()).await;
+
+        let mut exchange_info = serde_json::from_str::<ExchangeInfo>(&res)?;
+        // 由于默认关闭了响应中的PermissionSets的显示，
+        // 因此此处手动将permission全部填充到各个交易对信息中
+        let mut p: Vec<Permission> = Vec::with_capacity(2);
+        p.push(permission);
+        for si in exchange_info.symbols.iter_mut() {
+            let mut pp = p.clone();
+            if si.is_margin_trading_allowed {
+                pp.push(Permission::Margin);
+            }
+            si.permission_sets.push(pp);
         }
 
-        let exchange_info = serde_json::from_str::<ExchangeInfo>(&res)?;
+        // 移除非USDT交易对的信息，减小体积
+        exchange_info.symbols.retain(|si| si.quote_asset == "USDT");
+
+        // 保存到本地
+        if c_res.is_ok() {
+            match serde_json::to_string(&exchange_info) {
+                Ok(data) => {
+                    let _ = fs::write(&exchange_info_file, data.as_bytes()).await;
+                }
+                Err(e) => {
+                    tracing::error!("can't serialize exchange_info: {e}");
+                }
+            }
+        }
 
         Ok(exchange_info)
     }
@@ -285,12 +316,24 @@ impl RestConn {
 
     /// 查询现货下架计划(下架交易对列表)
     #[instrument(skip(self))]
-    pub async fn delist_schedule(&self) -> BiAnResult<DelistInfos> {
+    pub async fn delist_schedule(&self) -> BiAnResult<DelistSchedule> {
         let path = "/sapi/v1/spot/delist-schedule";
         let res = self
             .rest_req("get", path, PDelist, RateLimitParam::Weight(100))
             .await?;
-        let infos = serde_json::from_str::<DelistInfos>(&res)?;
+        let infos = serde_json::from_str::<DelistSchedule>(&res)?;
         Ok(infos)
+    }
+
+    /// 针对账户的所有资产信息
+    #[instrument(skip(self))]
+    pub async fn capital(&self) -> BiAnResult<String> {
+        let path = "/sapi/v1/capital/config/getall";
+        let res = self
+            .rest_req("get", path, PCapital, RateLimitParam::Weight(10))
+            .await?;
+        Ok(res)
+        // let infos = serde_json::from_str::<DelistSchedule>(&res)?;
+        // Ok(infos)
     }
 }

@@ -1,31 +1,13 @@
 #![allow(dead_code, non_snake_case)]
 
-use serde::Deserialize;
-use serde_json::{json, Value};
-use std::collections::HashMap;
-use tracing::{info, warn};
+pub mod some_types;
 
 use crate::errors::BiAnResult;
+use serde_json::json;
+use some_types::{CryptoInfoCheck, OfflineCheck, WarnInfo};
+use tracing::{info, warn};
 
-/// 如果确实有警告，警告内容存放在data字段(WarnMessage类型)的content字段中
-#[derive(Debug, Deserialize)]
-struct WarnInfo {
-    code: String,
-    success: bool,
-    message: Option<String>,
-    messageDetail: Option<String>,
-    data: Option<WarnMessage>,
-    #[serde(flatten)]
-    extra: HashMap<String, Value>,
-}
-
-#[derive(Debug, Deserialize)]
-struct WarnMessage {
-    content: Option<String>,
-    title: Option<String>,
-    #[serde(flatten)]
-    extra: HashMap<String, Value>,
-}
+pub use some_types::CryptoInfo;
 
 /// 查看该币当前是否存在警告信息
 /// 有时候某些币因为存在基本面的风险(如团队消失、申请破产、波动太大等等)，Bian会给出警告信息。
@@ -59,28 +41,6 @@ pub async fn check_coin_warning(sym: &str) -> BiAnResult<Option<String>> {
     }
 }
 
-/// 如果确实要下架，下架信息存放在data字段(OfflineMessage类型)中
-#[derive(Debug, Deserialize)]
-struct OfflineInfo {
-    code: String,
-    success: bool,
-    message: Option<String>,
-    messageDetail: Option<String>,
-    data: Option<OfflineMessage>,
-    #[serde(flatten)]
-    extra: HashMap<String, Value>,
-}
-
-#[derive(Debug, Deserialize)]
-struct OfflineMessage {
-    /// 是否将要下架
-    pom: bool,
-    /// 将要下架的时间(毫秒Epoch)
-    pomt: Option<u64>,
-    #[serde(flatten)]
-    extra: HashMap<String, Value>,
-}
-
 /// 检查该交易对是否将要下架(根据警告信息检查).
 /// sym忽略大小写，例如:
 ///
@@ -106,7 +66,7 @@ pub async fn check_offline(sym: &str) -> BiAnResult<Option<u64>> {
     // let url = format!("{}?symbol={}", url, sym);
 
     let client = reqwest::Client::new();
-    let res = client.get(url).send().await?.json::<OfflineInfo>().await?;
+    let res = client.get(url).send().await?.json::<OfflineCheck>().await?;
     info!("check offline: {:?}", res);
 
     if res.data.is_some() {
@@ -117,4 +77,50 @@ pub async fn check_offline(sym: &str) -> BiAnResult<Option<u64>> {
         }
     }
     Ok(None)
+}
+
+/// 获取币种的基本信息，包括排名、市值、市占率、流通量、总供应量
+///
+/// sym忽略大小写，可省略后缀，例如:
+///
+/// ```text
+/// get_crypto_info("btcusdt")
+/// get_crypto_info("ETHusdt")
+/// get_crypto_info("ETH")
+/// get_crypto_info("eth")
+/// ```
+pub async fn get_crypto_info(sym: &str) -> BiAnResult<CryptoInfo> {
+    // pub async fn get_crypto_info(sym: &str) -> BiAnResult<()> {
+    // 如果含有USDT后缀，去掉
+    let mut sym = sym.to_ascii_uppercase();
+    if sym.ends_with("USDT") {
+        sym = sym.strip_suffix("USDT").unwrap().to_string();
+    }
+
+    // https://www.binance.com/bapi/apex/v1/friendly/apex/marketing/tardingPair/detail?symbol=GFT
+    let mut url = String::from(
+        "https://www.binance.com/bapi/apex/v1/friendly/apex/marketing/tardingPair/detail",
+    );
+    url.reserve(18);
+    url.push_str("?symbol=");
+    url.push_str(&sym);
+
+    let client = reqwest::Client::new();
+    let res = client
+        .get(url)
+        .send()
+        .await?
+        // .json::<CryptoInfoCheck>()
+        .text()
+        .await?;
+    let res = match serde_json::from_str::<CryptoInfoCheck>(&res) {
+        Ok(res) => res,
+        Err(_) => {
+            println!("{res}");
+            return Err(crate::errors::BiAnApiError::Unknown(res));
+        }
+    };
+    // println!("{res}");
+    // Ok(())
+    Ok(res.data)
 }

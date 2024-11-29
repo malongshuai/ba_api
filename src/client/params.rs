@@ -3,6 +3,7 @@ use crate::{
     types::order::{OrderRespType, OrderSide, OrderType, TimeInForce},
     KLineInterval, SubAccountType,
 };
+use ba_types::Permission;
 use serde::{ser::SerializeStruct, Serialize};
 
 /// 将Symbol列表转换为URL参数字符串
@@ -69,11 +70,28 @@ impl Param for PServerTime {}
 
 #[derive(Debug)]
 pub struct PExchangeInfo<'a> {
-    symbols: Option<Vec<&'a str>>,
+    // symbols: Option<Vec<&'a str>>,
+    // permissions 不提供该字段时，默认包含["MARGIN", "SPOT"]，因此省略该字段，并且不能同时与symbols字段使用
+    permissions: Vec<&'a str>,
+    show_permission_sets: bool,
+    // symbolStatus 该字段不能和symbols字段同时使用
+    // symbol_status: String
 }
 impl<'a> PExchangeInfo<'a> {
-    pub fn new(symbols: Option<Vec<&str>>) -> PExchangeInfo {
-        PExchangeInfo { symbols }
+    pub fn new(permission: Permission) -> PExchangeInfo<'a> {
+        let permission_str = match permission {
+            Permission::Spot => "SPOT",
+            _ => {
+                panic!(
+                    "wrong argument `{permission:?}`, exchange_info only support SPOT Permission"
+                );
+            }
+        };
+        PExchangeInfo {
+            // symbols,
+            permissions: vec![permission_str],
+            show_permission_sets: false,
+        }
     }
 }
 impl<'a> Param for PExchangeInfo<'a> {}
@@ -83,21 +101,37 @@ impl<'a> Serialize for PExchangeInfo<'a> {
     where
         S: serde::Serializer,
     {
-        match &self.symbols {
-            None => serializer.serialize_struct("_", 0)?.end(),
-            Some(data) if data.is_empty() => serializer.serialize_struct("_", 0)?.end(),
-            Some(data) => {
-                let mut s = serializer.serialize_struct("PExchangeInfo", 1)?;
-                let mut str = String::new();
-                str.push('[');
-                for e in &data[0..(data.len() - 1)] {
-                    str.push_str(format!(r#""{}","#, e).as_str());
-                }
-                str.push_str(format!(r#""{}"]"#, data[data.len() - 1]).as_str());
-                s.serialize_field("symbols", &str)?;
-                s.end()
-            }
-        }
+        let mut state = serializer.serialize_struct("PExchangeInfo", 2)?;
+
+        // Serialize `symbols` as `["a","b","c"]` format
+        // if let Some(ref symbols) = self.symbols {
+        //     if !symbols.is_empty() {
+        //         let ele = symbols
+        //             .iter()
+        //             .map(|s| format!(r#""{}""#, s))
+        //             .collect::<Vec<_>>();
+        //         let serialized_symbols = format!("[{}]", ele.join(","));
+        //         state.serialize_field("symbols", &serialized_symbols)?;
+        //     }
+        // }
+
+        // Serialize `permissions` as `["a","b","c"]` format
+        let ele = self
+            .permissions
+            .iter()
+            .map(|p| format!(r#""{}""#, p))
+            .collect::<Vec<_>>();
+        let serialized_permissions = format!("[{}]", ele.join(","));
+        state.serialize_field("permissions", &serialized_permissions)?;
+
+        // Serialize other fields normally
+        state.serialize_field("showPermissionSets", &self.show_permission_sets)?;
+
+        // if let Some(ref symbol_status) = self.symbol_status {
+        //     state.serialize_field("SymbolStatus", symbol_status)?;
+        // }
+
+        state.end()
     }
 }
 
@@ -108,38 +142,40 @@ mod test {
     #[test]
     fn test_p_exchange_info() {
         // test None
-        let mut p = PExchangeInfo { symbols: None };
-        let mut x = serde_urlencoded::to_string(&p);
-        assert_eq!(Ok("".to_string()), x, "None test failed");
+        let p = PExchangeInfo::new(ba_types::Permission::Spot);
+        let x = serde_urlencoded::to_string(&p);
+        assert_eq!(
+            Ok("permissions=%5B%22SPOT%22%5D&showPermissionSets=false".to_string()),
+            x,
+            "None test failed"
+        );
 
         // test empty Vec
-        p = PExchangeInfo {
-            symbols: Some(vec![]),
-        };
-        x = serde_urlencoded::to_string(&p);
-        assert_eq!(Ok("".to_string()), x, "empty Vec test failed");
+        // p = PExchangeInfo::new(Some(vec![]));
+        // x = serde_urlencoded::to_string(&p);
+        // assert_eq!(
+        //     Ok("showPermissionSets=false".to_string()),
+        //     x,
+        //     "empty Vec test failed"
+        // );
 
-        // test Vec with one element
-        p = PExchangeInfo {
-            symbols: Some(vec!["BNBBTC"]),
-        };
-        x = serde_urlencoded::to_string(&p);
-        assert_eq!(
-            Ok("symbols=%5B%22BNBBTC%22%5D".to_string()),
-            x,
-            "one element vec test failed"
-        );
+        // // test Vec with one element
+        // p = PExchangeInfo::new(Some(vec!["BNBBTC"]));
+        // x = serde_urlencoded::to_string(&p);
+        // assert_eq!(
+        //     Ok("symbols=%5B%22BNBBTC%22%5D&showPermissionSets=false".to_string()),
+        //     x,
+        //     "one element vec test failed"
+        // );
 
-        // test Vec with two or more element
-        p = PExchangeInfo {
-            symbols: Some(vec!["BNBBTC", "BTCUSDT"]),
-        };
-        x = serde_urlencoded::to_string(&p);
-        assert_eq!(
-            Ok("symbols=%5B%22BNBBTC%22%2C%22BTCUSDT%22%5D".to_string()),
-            x,
-            "two or more element vec test failed"
-        );
+        // // test Vec with two or more element
+        // p = PExchangeInfo::new(Some(vec!["BNBBTC", "BTCUSDT"]));
+        // x = serde_urlencoded::to_string(&p);
+        // assert_eq!(
+        //     Ok("symbols=%5B%22BNBBTC%22%2C%22BTCUSDT%22%5D&showPermissionSets=false".to_string()),
+        //     x,
+        //     "two or more element vec test failed"
+        // );
     }
 }
 
@@ -639,6 +675,15 @@ pub struct PDelist;
 impl Param for PDelist {
     fn check_type(&self) -> CheckType {
         CheckType::MarketData
+    }
+}
+
+/// 现货交易对下架计划
+#[derive(Debug, Serialize)]
+pub struct PCapital;
+impl Param for PCapital {
+    fn check_type(&self) -> CheckType {
+        CheckType::UserData
     }
 }
 
