@@ -13,11 +13,13 @@ websocket = ["rustls", "tokio-tungstenite"]
 ba_types = { path = "../../ba_types", features = [
     "spot",
 ], default-features = false }
+ba_global = { path = "../../ba_global", features = ["spot"] }
 chrono_ext = { path = "../../chrono_ext" }
 reqwest = { version = "0.12", features = [
     "json",
     "socks",
     "rustls-tls",
+    "gzip",
     "charset",
     "macos-system-configuration",
 ], default-features = false }
@@ -35,7 +37,7 @@ tokio-tungstenite = { version = "0.23", features = [
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 hex = "0.4"
-thiserror = "1.0"
+thiserror = "2"
 tracing = "0.1"
 serde_urlencoded = "0.7"
 futures-util = "0.3"

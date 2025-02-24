@@ -4,10 +4,8 @@ pub mod some_types;
 
 use crate::errors::BiAnResult;
 use serde_json::json;
-use some_types::{CryptoInfoCheck, OfflineCheck, WarnInfo};
+use some_types::{TradingPairInfoWrap, WarnInfo};
 use tracing::{info, warn};
-
-pub use some_types::CryptoInfo;
 
 /// 查看该币当前是否存在警告信息
 /// 有时候某些币因为存在基本面的风险(如团队消失、申请破产、波动太大等等)，Bian会给出警告信息。
@@ -56,6 +54,11 @@ pub async fn check_coin_warning(sym: &str) -> BiAnResult<Option<String>> {
 pub async fn check_offline(sym: &str) -> BiAnResult<Option<u64>> {
     let sym = sym.to_ascii_uppercase();
 
+    // 下面几个URL，都可以一次性获取所有交易对的信息，
+    // 其中包含每个交易对是否下架以及如果下架其毫秒级的下架Epoch，但需要修改它的时区
+    // - https://www.binance.com/bapi/asset/v2/public/asset-service/product/get-products
+    // - https://www.binance.com/bapi/margin/v1/friendly/margin/symbols
+    // - https://www.binance.com/bapi/margin/v1/public/isolated-margin/pair/listed
     let mut url = String::from(
         "https://www.binance.com/bapi/asset/v2/public/asset-service/product/get-product-by-symbol",
     );
@@ -66,61 +69,20 @@ pub async fn check_offline(sym: &str) -> BiAnResult<Option<u64>> {
     // let url = format!("{}?symbol={}", url, sym);
 
     let client = reqwest::Client::new();
-    let res = client.get(url).send().await?.json::<OfflineCheck>().await?;
-    info!("check offline: {:?}", res);
-
-    if res.data.is_some() {
-        if let Some(off_msg) = res.data {
-            if off_msg.pom {
-                return Ok(off_msg.pomt);
-            }
-        }
-    }
-    Ok(None)
-}
-
-/// 获取币种的基本信息，包括排名、市值、市占率、流通量、总供应量
-///
-/// sym忽略大小写，可省略后缀，例如:
-///
-/// ```text
-/// get_crypto_info("btcusdt")
-/// get_crypto_info("ETHusdt")
-/// get_crypto_info("ETH")
-/// get_crypto_info("eth")
-/// ```
-pub async fn get_crypto_info(sym: &str) -> BiAnResult<CryptoInfo> {
-    // pub async fn get_crypto_info(sym: &str) -> BiAnResult<()> {
-    // 如果含有USDT后缀，去掉
-    let mut sym = sym.to_ascii_uppercase();
-    if sym.ends_with("USDT") {
-        sym = sym.strip_suffix("USDT").unwrap().to_string();
-    }
-
-    // https://www.binance.com/bapi/apex/v1/friendly/apex/marketing/tardingPair/detail?symbol=GFT
-    let mut url = String::from(
-        "https://www.binance.com/bapi/apex/v1/friendly/apex/marketing/tardingPair/detail",
-    );
-    url.reserve(18);
-    url.push_str("?symbol=");
-    url.push_str(&sym);
-
-    let client = reqwest::Client::new();
     let res = client
         .get(url)
         .send()
         .await?
-        // .json::<CryptoInfoCheck>()
-        .text()
+        .json::<TradingPairInfoWrap>()
         .await?;
-    let res = match serde_json::from_str::<CryptoInfoCheck>(&res) {
-        Ok(res) => res,
-        Err(_) => {
-            println!("{res}");
-            return Err(crate::errors::BiAnApiError::Unknown(res));
+    info!("check offline: {:?}", res);
+
+    if res.data.is_some() {
+        if let Some(off_msg) = res.data {
+            if off_msg.to_delist {
+                return Ok(off_msg.delist_time);
+            }
         }
-    };
-    // println!("{res}");
-    // Ok(())
-    Ok(res.data)
+    }
+    Ok(None)
 }

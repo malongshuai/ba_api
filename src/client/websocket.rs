@@ -1,7 +1,8 @@
 use crate::{
     errors::{BiAnApiError, BiAnResult},
-    KLineInterval, WS_BASE_URL,
+    KLineInterval,
 };
+use ba_global::WS_BASE_URL;
 use concat_string::concat_string;
 use futures_util::{
     stream::{SplitSink, SplitStream},

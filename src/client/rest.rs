@@ -2,8 +2,9 @@ use crate::{
     client::rate_limit::RateLimitParam,
     errors::{BadRequest, BiAnApiError, BiAnResult, MethodError},
     utils::ExchangeInfoExt,
-    ExchangeInfo, SymbolInfo, REST_BASE_URL,
+    ExchangeInfo, SymbolInfo,
 };
+use ba_global::REST_BASE_URL;
 use reqwest::{header, Url};
 use serde::Serialize;
 use std::{fmt::Debug, str::FromStr, sync::Arc, time::Duration};

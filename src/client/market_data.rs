@@ -1,10 +1,10 @@
+use ba_global::app_dir;
 use ba_types::Permission;
 
 use super::{
     params::{PCapital, PDelist},
     rate_limit::RateLimitParam,
 };
-use crate::app_dir;
 use {
     super::{
         params::{
