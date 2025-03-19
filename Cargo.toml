@@ -30,7 +30,7 @@ rustls = { version = "0.23", features = [
     "logging",
     "tls12",
 ], default-features = false, optional = true }
-tokio-tungstenite = { version = "0.23", features = [
+tokio-tungstenite = { version = "0.26", features = [
     "rustls-tls-webpki-roots",
 ], optional = true }
 # tokio-tungstenite = { version = "0.23", features = ["native-tls-vendored"] }

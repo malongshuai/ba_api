@@ -195,7 +195,7 @@ impl RestConn {
         let path = "/api/v3/aggTrades";
         let params = PAggTrades::new(symbol, from_id, start_time, end_time, limit)?;
         let res = self
-            .rest_req("get", path, params, RateLimitParam::Weight(2))
+            .rest_req("get", path, params, RateLimitParam::Weight(4))
             .await?;
         let agg_trades = serde_json::from_str::<Vec<AggTrade>>(&res)?;
         Ok(agg_trades)

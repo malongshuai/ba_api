@@ -3,6 +3,7 @@ use crate::{
     KLineInterval,
 };
 use ba_global::WS_BASE_URL;
+use ba_types::WsResponse;
 use concat_string::concat_string;
 use futures_util::{
     stream::{SplitSink, SplitStream},
@@ -18,7 +19,7 @@ use tokio_tungstenite::{
     connect_async,
     tungstenite::{
         protocol::{frame::coding::CloseCode, CloseFrame},
-        Message,
+        Message, Utf8Bytes,
     },
     MaybeTlsStream, WebSocketStream,
 };
@@ -169,7 +170,7 @@ impl WS {
     async fn close_stream(&self) -> BiAnResult<()> {
         let close_frame = CloseFrame {
             code: CloseCode::Normal,
-            reason: std::borrow::Cow::Borrowed("force close"),
+            reason: Utf8Bytes::from_static("force close"),
         };
         let msg = Message::Close(Some(close_frame));
         self.ws_writer.write().await.send(msg).await?;
@@ -178,11 +179,23 @@ impl WS {
 
     /// 处理ws接收到的信息，并且在接收到ws关闭信息的时候替换重建ws
     /// 返回Some(close_reason)表示要重建ws，返回None表示一切正常无需重建
-    async fn handle_msg(&self, msg: Message, data_sender: &mpsc::Sender<String>) -> Option<String> {
+    async fn handle_msg(
+        &self,
+        msg: Message,
+        data_sender: &mpsc::Sender<WsResponse>,
+    ) -> Option<String> {
         match msg {
             Message::Text(data) => {
-                if data_sender.send(data).await.is_err() {
-                    error!("Data Receiver already closed");
+                match serde_json::from_slice::<WsResponse>(data.as_bytes()) {
+                    Ok(d) => {
+                        if data_sender.send(d).await.is_err() {
+                            error!("Data Receiver is closed");
+                        }
+                    }
+                    Err(e) => {
+                        // 接收到无法解析的内容不停止，继续从websocket里等待数据
+                        error!("Ws Message Decode to WsResponse Error, error: {e}, msg content: {}", data.as_str());
+                    }
                 }
             }
             Message::Ping(d) => {
@@ -193,6 +206,7 @@ impl WS {
                 }
             }
             Message::Close(Some(data)) => {
+                warn!("recv CloseFrame: {}", data.code);
                 return Some(data.reason.to_string());
             }
             _ => (),
@@ -208,7 +222,7 @@ impl WS {
           "method": "LIST_SUBSCRIPTIONS",
           "id": id
         });
-        let msg = Message::Text(json_text.to_string());
+        let msg = Message::Text(json_text.to_string().into());
         if let Err(e) = self.ws_writer.write().await.send(msg).await {
             error!("channel closed: {}, <{}>", e, self.channel_path().await,);
         }
@@ -226,7 +240,7 @@ impl WS {
             "params": contents,
             "id": id
         });
-        let msg = Message::Text(json_text.to_string());
+        let msg = Message::Text(json_text.to_string().into());
         match self.ws_writer.write().await.send(msg).await {
             Ok(_) => {
                 self.channel_path.write().await.extend(contents);
@@ -248,7 +262,7 @@ impl WS {
             "params": contents,
             "id": id
         });
-        let msg = Message::Text(json_text.to_string());
+        let msg = Message::Text(json_text.to_string().into());
         match self.ws_writer.write().await.send(msg).await {
             Ok(_) => {
                 let mut inner = self.channel_path.write().await;
@@ -304,7 +318,7 @@ impl WsClient {
     /// ```
     pub async fn new(
         channel_path: ChannelPath,
-        data_sender: mpsc::Sender<String>,
+        data_sender: mpsc::Sender<WsResponse>,
     ) -> BiAnResult<(Self, JoinHandle<()>)> {
         let ws = WS::new(channel_path).await?;
         let (close_sender, close_receiver) = mpsc::channel::<bool>(1);
@@ -376,7 +390,7 @@ impl WsClient {
     }
 
     /// 读取数据通道，当无法重建ws时才返回
-    async fn read_from_channel(&self, data_sender: mpsc::Sender<String>) {
+    async fn read_from_channel(&self, data_sender: mpsc::Sender<WsResponse>) {
         //@ 循环不断地接收ws的信息
         loop {
             let err_msg = {
@@ -432,7 +446,7 @@ impl WsClient {
     /// symbols参数忽略大小写  
     pub async fn agg_trade(
         symbols: Vec<String>,
-        data_sender: mpsc::Sender<String>,
+        data_sender: mpsc::Sender<WsResponse>,
     ) -> BiAnResult<(Self, JoinHandle<()>)> {
         // channel: <sym>@aggTrade
         let channel_path = symbols
@@ -447,7 +461,7 @@ impl WsClient {
     /// symbols参数忽略大小写  
     pub async fn trade(
         symbols: Vec<String>,
-        data_sender: mpsc::Sender<String>,
+        data_sender: mpsc::Sender<WsResponse>,
     ) -> BiAnResult<(Self, JoinHandle<()>)> {
         // channel: <sym>@trade
         let channel_path = symbols
@@ -463,7 +477,7 @@ impl WsClient {
     pub async fn kline(
         interval: &str,
         symbols: Vec<String>,
-        data_sender: mpsc::Sender<String>,
+        data_sender: mpsc::Sender<WsResponse>,
     ) -> BiAnResult<(Self, JoinHandle<()>)> {
         if !KLineInterval::is_intv(interval) {
             panic!("argument error: <{}> invalid kline interval", interval);
@@ -483,7 +497,7 @@ impl WsClient {
     /// symbols参数忽略大小写  
     pub async fn mini_ticker(
         symbols: Vec<String>,
-        data_sender: mpsc::Sender<String>,
+        data_sender: mpsc::Sender<WsResponse>,
     ) -> BiAnResult<(Self, JoinHandle<()>)> {
         // channel: <sym>@miniTicker
         let channel_path = symbols
@@ -496,7 +510,7 @@ impl WsClient {
     /// 以ws_client的方式订阅"全市场所有Symbol的精简Ticker"(该操作不会"阻塞"当前异步任务)  
     /// 推送所有交易对的最近24小时精简ticker信息.需注意，只有更新的ticker才会被推送
     pub async fn all_mini_ticker(
-        data_sender: mpsc::Sender<String>,
+        data_sender: mpsc::Sender<WsResponse>,
     ) -> BiAnResult<(Self, JoinHandle<()>)> {
         // channel: !miniTicker@arr
         let channel_path = HashSet::from(["!miniTicker@arr".into()]);
@@ -508,7 +522,7 @@ impl WsClient {
     /// symbols参数忽略大小写  
     pub async fn ticker(
         symbols: Vec<String>,
-        data_sender: mpsc::Sender<String>,
+        data_sender: mpsc::Sender<WsResponse>,
     ) -> BiAnResult<(Self, JoinHandle<()>)> {
         // channel: <sym>@ticker
         let channel_path = symbols
@@ -521,7 +535,7 @@ impl WsClient {
     /// 以ws_client的方式订阅"全市场所有Symbol的完整Ticker"(该操作不会"阻塞"当前异步任务)  
     /// 推送所有交易对的最近24小时完整ticker信息.需注意，只有更新的ticker才会被推送
     pub async fn all_ticker(
-        data_sender: mpsc::Sender<String>,
+        data_sender: mpsc::Sender<WsResponse>,
     ) -> BiAnResult<(Self, JoinHandle<()>)> {
         // channel: !ticker@arr
         let channel_path = HashSet::from(["!ticker@arr".into()]);
@@ -533,7 +547,7 @@ impl WsClient {
     /// symbols参数忽略大小写  
     pub async fn bookticker(
         symbols: Vec<String>,
-        data_sender: mpsc::Sender<String>,
+        data_sender: mpsc::Sender<WsResponse>,
     ) -> BiAnResult<(Self, JoinHandle<()>)> {
         // channel: <sym>@bookTicker
         let channel_path = symbols
@@ -550,7 +564,7 @@ impl WsClient {
     pub async fn depth_with_level(
         symbols: Vec<String>,
         level: u8,
-        data_sender: mpsc::Sender<String>,
+        data_sender: mpsc::Sender<WsResponse>,
     ) -> BiAnResult<(Self, JoinHandle<()>)> {
         // channel: <symbol>@depth<levels> 或 <symbol>@depth<levels>@100ms
 
@@ -579,7 +593,7 @@ impl WsClient {
     /// symbols参数忽略大小写  
     pub async fn depth_incr(
         symbols: Vec<String>,
-        data_sender: mpsc::Sender<String>,
+        data_sender: mpsc::Sender<WsResponse>,
     ) -> BiAnResult<(Self, JoinHandle<()>)> {
         // channel: <symbol>@depth 或 <symbol>@depth@100ms
         let channel_path = symbols
@@ -595,7 +609,7 @@ impl WsClient {
     /// 包括账户更新、余额更新、订单更新，参考(<https://binance-docs.github.io/apidocs/spot/cn/#websocket-2>)  
     pub async fn account(
         listen_key: String,
-        data_sender: mpsc::Sender<String>,
+        data_sender: mpsc::Sender<WsResponse>,
     ) -> BiAnResult<(Self, JoinHandle<()>)> {
         Self::new(ChannelPath::listen_key_path(listen_key), data_sender).await
     }
