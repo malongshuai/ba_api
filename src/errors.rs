@@ -1,4 +1,3 @@
-use serde::{Deserialize, Serialize};
 use std::{fmt::Display, io};
 use thiserror::Error;
 #[cfg(feature = "websocket")]
@@ -60,12 +59,6 @@ pub type BiAnResult<T> = Result<T, BiAnApiError>;
 
 #[derive(Debug, Error)]
 pub struct MethodError {
-    pub msg: String,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct BadRequest {
-    pub code: i32,
     pub msg: String,
 }
 

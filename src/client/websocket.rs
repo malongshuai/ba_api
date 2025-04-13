@@ -2,7 +2,7 @@ use crate::{
     errors::{BiAnApiError, BiAnResult},
     KLineInterval,
 };
-use ba_global::WS_BASE_URL;
+use ba_global::{WS_API_URL, WS_STREAM_URL};
 use ba_types::WsResponse;
 use concat_string::concat_string;
 use futures_util::{
@@ -30,11 +30,13 @@ type WsStream = SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>;
 
 #[derive(Debug)]
 pub enum ChannelPath {
-    /// 订阅行情数据，
+    /// 订阅行情数据流，
     /// 空的MarketPath表示暂时不订阅，而是等待以后手动添加订阅
-    MarketPath(HashSet<String>),
+    MarketStream(HashSet<String>),
     /// 订阅账户数据
     ListenKey(String),
+    /// websocket API，不需要额外参数，而是在请求时发送参数
+    Api,
 }
 
 impl ChannelPath {
@@ -42,8 +44,9 @@ impl ChannelPath {
     /// 对于账户类定于，返回："<ListenKey>"
     fn to_path(&self) -> String {
         match self {
-            Self::MarketPath(s) => Vec::from_iter(s.iter().map(|x| x.as_str())).join("/"),
+            Self::MarketStream(s) => Vec::from_iter(s.iter().map(|x| x.as_str())).join("/"),
             Self::ListenKey(l) => l.into(),
+            Self::Api => String::new(),
         }
     }
 
@@ -51,13 +54,13 @@ impl ChannelPath {
     /// ```
     /// ChannelPath::market_path(HashSet::from(["btcusdt@aggTrade".to_string()]));
     /// ```
-    pub fn market_path(content: HashSet<String>) -> Self {
-        Self::MarketPath(content)
+    pub fn market_stream_path(content: HashSet<String>) -> Self {
+        Self::MarketStream(content)
     }
 
     /// 生成空的MarketPath，空的MarketPath表示暂时不订阅，而是等待以后手动添加订阅
-    pub fn empty_market_path() -> Self {
-        Self::MarketPath(HashSet::default())
+    pub fn empty_market_stream_path() -> Self {
+        Self::MarketStream(HashSet::default())
     }
 
     /// 订阅行情数据，
@@ -68,23 +71,25 @@ impl ChannelPath {
         Self::ListenKey(listen_key)
     }
 
-    /// 向MarketPath中添加数据，如果是ListenKey类型，则不做任何事情
+    /// 向MarketStreamPath中添加数据，如果是ListenKey类型，则不做任何事情
     /// 用于手动订阅时添加指定要订阅的channel
     fn extend(&mut self, contents: HashSet<String>) {
         match self {
-            ChannelPath::MarketPath(h) => h.extend(contents),
+            ChannelPath::MarketStream(h) => h.extend(contents),
             ChannelPath::ListenKey(_) => {}
+            ChannelPath::Api => {}
         }
     }
 
-    /// 从MarketPath中移除数据，如果是ListenKey类型，则不做任何事情
+    /// 从MarketStreamPath中移除数据，如果是ListenKey类型，则不做任何事情
     /// 用于手动取消订阅时移除指定要取消订阅的channel
     fn remove(&mut self, data: &str) {
         match self {
-            ChannelPath::MarketPath(h) => {
+            ChannelPath::MarketStream(h) => {
                 h.remove(data);
             }
             ChannelPath::ListenKey(_) => {}
+            ChannelPath::Api => {}
         }
     }
 }
@@ -99,14 +104,20 @@ struct WS {
 }
 
 impl WS {
-    fn make_ws_url(channel_path: &ChannelPath) -> String {
-        let path = channel_path.to_path();
-        if !path.is_empty() {
-            concat_string!(WS_BASE_URL, "/stream?streams=", path)
-            // format!("{}/stream?streams={}", WS_BASE_URL, path)
-        } else {
-            concat_string!(WS_BASE_URL, "/stream", path)
-            // format!("{}/stream", WS_BASE_URL)
+    fn ws_url(channel_path: &ChannelPath) -> String {
+        match channel_path {
+            ChannelPath::MarketStream(hash_set) => {
+                let path = Vec::from_iter(hash_set.iter().map(|x| x.as_str())).join("/");
+                if !path.is_empty() {
+                    concat_string!(WS_STREAM_URL, "/stream?streams=", path)
+                    // format!("{}/stream?streams={}", WS_BASE_URL, path)
+                } else {
+                    concat_string!(WS_STREAM_URL, "/stream", path)
+                    // format!("{}/stream", WS_BASE_URL)
+                }
+            }
+            ChannelPath::ListenKey(key) => concat_string!(WS_STREAM_URL, "/stream?streams=", key),
+            ChannelPath::Api => WS_API_URL.into(),
         }
     }
 
@@ -118,15 +129,16 @@ impl WS {
     /// 每次调用都只能订阅单个频道(channel参数)  
     async fn new(channel_path: ChannelPath) -> BiAnResult<Self> {
         match &channel_path {
-            ChannelPath::MarketPath(v) => {
+            ChannelPath::MarketStream(v) => {
                 if v.len() > 1024 {
                     return Err(BiAnApiError::TooManySubscribes(v.len()));
                 }
             }
             ChannelPath::ListenKey(_) => {}
+            ChannelPath::Api => {}
         }
 
-        let url = Self::make_ws_url(&channel_path);
+        let url = Self::ws_url(&channel_path);
 
         let (ws_stream, _response) = connect_async(&url).await?;
         let (ws_writer, ws_reader) = ws_stream.split();
@@ -146,7 +158,7 @@ impl WS {
     async fn replace_inner_stream(&self) {
         let dur = Duration::from_millis(500);
         let s = self.channel_path.read().await;
-        let url = Self::make_ws_url(&s);
+        let url = Self::ws_url(&s);
         loop {
             if let Ok((ws_stream, _response)) = connect_async(&url).await {
                 let (ws_writer, ws_reader) = ws_stream.split();
@@ -194,7 +206,10 @@ impl WS {
                     }
                     Err(e) => {
                         // 接收到无法解析的内容不停止，继续从websocket里等待数据
-                        error!("Ws Message Decode to WsResponse Error, error: {e}, msg content: {}", data.as_str());
+                        error!(
+                            "Ws Message Decode to WsResponse Error, error: {e}, msg content: {}",
+                            data.as_str()
+                        );
                     }
                 }
             }
@@ -229,10 +244,11 @@ impl WS {
     }
 
     /// 手动订阅
-    async fn subscribe(&self, channel_path: ChannelPath, id: u64) {
+    async fn stream_subscribe(&self, channel_path: ChannelPath, id: u64) {
         let contents = match channel_path {
-            ChannelPath::MarketPath(s) => s,
+            ChannelPath::MarketStream(s) => s,
             ChannelPath::ListenKey(_) => panic!("subscribe account data not allowed"),
+            ChannelPath::Api => panic!("subscribe websocket api not allowed"),
         };
 
         let json_text = serde_json::json!({
@@ -252,10 +268,11 @@ impl WS {
     }
 
     /// 取消订阅
-    async fn unsubscribe(&self, channel_path: ChannelPath, id: u64) {
+    async fn stream_unsubscribe(&self, channel_path: ChannelPath, id: u64) {
         let contents = match channel_path {
-            ChannelPath::MarketPath(s) => s,
+            ChannelPath::MarketStream(s) => s,
             ChannelPath::ListenKey(_) => panic!("unsubscribe account data not allowed"),
+            ChannelPath::Api => panic!("unsubscribe websocket api not allowed"),
         };
         let json_text = serde_json::json!({
             "method": "UNSUBSCRIBE",
@@ -361,7 +378,7 @@ impl WsClient {
     /// self.subscribe(channel_path).await;
     /// ```
     pub async fn subscribe(&self, channel_path: ChannelPath, id: u64) {
-        self.ws.subscribe(channel_path, id).await;
+        self.ws.stream_subscribe(channel_path, id).await;
     }
 
     /// 取消订阅
@@ -370,7 +387,7 @@ impl WsClient {
     /// self.unsubscribe(channel_path).await;
     /// ```
     pub async fn unsubscribe(&self, channel_path: ChannelPath, id: u64) {
-        self.ws.unsubscribe(channel_path, id).await;
+        self.ws.stream_unsubscribe(channel_path, id).await;
     }
 
     /// 列出订阅内容，可用于检查是否订阅成功.
@@ -441,6 +458,13 @@ impl WsClient {
         }
     }
 
+    /// 订阅websocket api连接，
+    /// 1.可以发送类似于rest api的请求(比如下单、撤单、获取K线等), 并获得响应
+    /// 2.也可以登录之后订阅账户信息变更时推送的数据流
+    pub async fn api(data_sender: mpsc::Sender<WsResponse>) -> BiAnResult<(Self, JoinHandle<()>)> {
+        Self::new(ChannelPath::Api, data_sender).await
+    }
+
     /// 以ws_client的方式订阅"归集交易流"(该操作不会"阻塞"当前异步任务)  
     /// 归集交易 stream 推送交易信息，是对单一订单的集合  
     /// symbols参数忽略大小写  
@@ -453,7 +477,7 @@ impl WsClient {
             .iter()
             .map(|sym| concat_string!(sym.to_ascii_lowercase(), "@aggTrade"))
             .collect::<HashSet<String>>();
-        Self::new(ChannelPath::market_path(channel_path), data_sender).await
+        Self::new(ChannelPath::market_stream_path(channel_path), data_sender).await
     }
 
     /// 以ws_client的方式订阅"逐笔交易流"(该操作不会"阻塞"当前异步任务)  
@@ -468,7 +492,7 @@ impl WsClient {
             .iter()
             .map(|sym| concat_string!(sym.to_ascii_lowercase(), "@trade"))
             .collect::<HashSet<String>>();
-        Self::new(ChannelPath::market_path(channel_path), data_sender).await
+        Self::new(ChannelPath::market_stream_path(channel_path), data_sender).await
     }
 
     /// 以ws_client的方式订阅"K线数据流"(该操作不会"阻塞"当前异步任务)  
@@ -489,7 +513,7 @@ impl WsClient {
             .map(|sym| concat_string!(sym.to_ascii_lowercase(), "@kline_", interval))
             .collect::<HashSet<String>>();
 
-        Self::new(ChannelPath::market_path(channel_path), data_sender).await
+        Self::new(ChannelPath::market_stream_path(channel_path), data_sender).await
     }
 
     /// 以ws_client的方式订阅"按symbol的精简Ticker"(该操作不会"阻塞"当前异步任务)  
@@ -504,7 +528,7 @@ impl WsClient {
             .iter()
             .map(|sym| concat_string!(sym.to_ascii_lowercase(), "@miniTicker"))
             .collect::<HashSet<String>>();
-        Self::new(ChannelPath::market_path(channel_path), data_sender).await
+        Self::new(ChannelPath::market_stream_path(channel_path), data_sender).await
     }
 
     /// 以ws_client的方式订阅"全市场所有Symbol的精简Ticker"(该操作不会"阻塞"当前异步任务)  
@@ -514,7 +538,7 @@ impl WsClient {
     ) -> BiAnResult<(Self, JoinHandle<()>)> {
         // channel: !miniTicker@arr
         let channel_path = HashSet::from(["!miniTicker@arr".into()]);
-        Self::new(ChannelPath::market_path(channel_path), data_sender).await
+        Self::new(ChannelPath::market_stream_path(channel_path), data_sender).await
     }
 
     /// 以ws_client的方式订阅"按symbol的完整Ticker"(该操作不会"阻塞"当前异步任务)  
@@ -529,7 +553,7 @@ impl WsClient {
             .iter()
             .map(|sym| concat_string!(sym.to_ascii_lowercase(), "@ticker"))
             .collect::<HashSet<String>>();
-        Self::new(ChannelPath::market_path(channel_path), data_sender).await
+        Self::new(ChannelPath::market_stream_path(channel_path), data_sender).await
     }
 
     /// 以ws_client的方式订阅"全市场所有Symbol的完整Ticker"(该操作不会"阻塞"当前异步任务)  
@@ -539,7 +563,7 @@ impl WsClient {
     ) -> BiAnResult<(Self, JoinHandle<()>)> {
         // channel: !ticker@arr
         let channel_path = HashSet::from(["!ticker@arr".into()]);
-        Self::new(ChannelPath::market_path(channel_path), data_sender).await
+        Self::new(ChannelPath::market_stream_path(channel_path), data_sender).await
     }
 
     /// 以ws_client的方式订阅"按Symbol的最优挂单信息"(该操作不会"阻塞"当前异步任务)  
@@ -554,7 +578,7 @@ impl WsClient {
             .iter()
             .map(|sym| concat_string!(sym.to_ascii_lowercase(), "@bookTicker"))
             .collect::<HashSet<String>>();
-        Self::new(ChannelPath::market_path(channel_path), data_sender).await
+        Self::new(ChannelPath::market_stream_path(channel_path), data_sender).await
     }
 
     /// 以ws_client的方式订阅"有限档深度信息"(该操作不会"阻塞"当前异步任务)  
@@ -585,7 +609,7 @@ impl WsClient {
             // .map(|sym| format!("{}@depth{}@100ms", sym.to_lowercase(), level))
             .collect::<HashSet<String>>();
 
-        Self::new(ChannelPath::market_path(channel_path), data_sender).await
+        Self::new(ChannelPath::market_stream_path(channel_path), data_sender).await
     }
 
     /// 以ws_client的方式订阅"增量深度信息"(该操作不会"阻塞"当前异步任务)  
@@ -601,7 +625,7 @@ impl WsClient {
             .map(|sym| concat_string!(sym.to_ascii_lowercase(), "@@depth@100ms"))
             .collect::<HashSet<String>>();
 
-        Self::new(ChannelPath::market_path(channel_path), data_sender).await
+        Self::new(ChannelPath::market_stream_path(channel_path), data_sender).await
     }
 
     /// 以ws_client的方式订阅"Websocket账户信息推送"(该操作不会"阻塞"当前异步任务)  

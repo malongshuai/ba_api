@@ -349,7 +349,10 @@ impl RestConn {
     ) -> BiAnResult<Vec<MyTrades>> {
         let path = "/api/v3/myTrades";
         let params = PMyTrades::new(symbol, order_id, start_time, end_time, from_id, limit);
-        let rate_limit = 20;
+        let mut rate_limit = 20;
+        if order_id.is_some() {
+            rate_limit = 5;
+        }
         let res = self
             .rest_req("get", path, params, RateLimitParam::Weight(rate_limit))
             .await?;
