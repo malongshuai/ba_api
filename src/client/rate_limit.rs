@@ -24,7 +24,7 @@
 //! ]
 
 use ba_types::{ExchangeInfo, RateLimit, RateLimitInterVal, RateLimitType};
-use chrono_ext::{now0, DateTime, FixedOffset, ParseDateTimeExt, Timelike};
+use chrono_ext::{DateTime, FixedOffset, ParseDateTimeExt, Timelike, now0};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::error;
@@ -252,25 +252,25 @@ impl RestApiRateLimits {
          * 因此，通过判断 response_date 的响应时间来判断该响应发生在重置前还是重置后，
          * 只有响应发生在重置后，才更新当前已经消耗的值
          */
-        if inner.weight.reset_datetime < response_date {
-            if let Some(n) = weight_used {
-                let used = (inner.weight.rate_limit.limit - inner.weight.remain).max(n);
-                inner.weight.remain = inner.weight.rate_limit.limit - used;
-            }
+        if inner.weight.reset_datetime < response_date
+            && let Some(n) = weight_used
+        {
+            let used = (inner.weight.rate_limit.limit - inner.weight.remain).max(n);
+            inner.weight.remain = inner.weight.rate_limit.limit - used;
         }
 
-        if inner.order_sec10.reset_datetime < response_date {
-            if let Some(n) = order_sec10 {
-                let used = (inner.order_sec10.rate_limit.limit - inner.order_sec10.remain).max(n);
-                inner.order_sec10.remain = inner.order_sec10.rate_limit.limit - used;
-            }
+        if inner.order_sec10.reset_datetime < response_date
+            && let Some(n) = order_sec10
+        {
+            let used = (inner.order_sec10.rate_limit.limit - inner.order_sec10.remain).max(n);
+            inner.order_sec10.remain = inner.order_sec10.rate_limit.limit - used;
         }
 
-        if inner.order_day1.reset_datetime < response_date {
-            if let Some(n) = order_day1 {
-                let used = (inner.order_day1.rate_limit.limit - inner.order_day1.remain).max(n);
-                inner.order_day1.remain = inner.order_day1.rate_limit.limit - used;
-            }
+        if inner.order_day1.reset_datetime < response_date
+            && let Some(n) = order_day1
+        {
+            let used = (inner.order_day1.rate_limit.limit - inner.order_day1.remain).max(n);
+            inner.order_day1.remain = inner.order_day1.rate_limit.limit - used;
         }
     }
 }

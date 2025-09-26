@@ -1,7 +1,7 @@
 use super::{
     params::{
         PAccount, PAllOrders, PCancelOpenOrders, PCancelOrder, PGetOpenOrders, PGetOrder,
-        PListenKey, PMyTrades, POrder, PRateLimitInfo, Param,
+        PMyTrades, POrder, PRateLimitInfo,
     },
     rate_limit::RateLimitParam,
     RestConn,
@@ -9,14 +9,12 @@ use super::{
 use crate::{
     errors::BiAnResult,
     types::{
-        account::{Account, ListenKey},
+        account::Account,
         order::{CancelOpenOrdersInfo, CancelOrderInfo, MyTrades, Order, OrderInfo},
     },
     utils::SymbolInfoExt,
 };
 use ba_types::RateLimit;
-use serde::Serialize;
-use std::fmt::Debug;
 use tracing::instrument;
 
 /// 现货账户和现货交易接口
@@ -364,128 +362,12 @@ impl RestConn {
     #[instrument(skip(self))]
     pub async fn rate_limit_info(&self) -> BiAnResult<Vec<RateLimit>> {
         let path = "/api/v3/rateLimit/order";
-        let params = PRateLimitInfo;
+        let params = PRateLimitInfo::new();
         let rate_limit = 40;
         let res = self
             .rest_req("get", path, params, RateLimitParam::Weight(rate_limit))
             .await?;
         let rate_limit_info = serde_json::from_str::<Vec<RateLimit>>(&res)?;
         Ok(rate_limit_info)
-    }
-}
-
-/// Listen Key接口
-impl RestConn {
-    #[instrument(skip(self))]
-    async fn listen_key<P: Serialize + Param + Debug>(
-        &self,
-        account_type: &str,
-        action: &str,
-        params: P,
-    ) -> BiAnResult<String> {
-        let path = match account_type {
-            "spot" => "/api/v3/userDataStream",
-            "margin" => "/sapi/v1/userDataStream",
-            "margin_isolated" => "/sapi/v1/userDataStream/isolated",
-            _ => panic!("error account, valid type: spot/margin/margin_isolated"),
-        };
-
-        let method = match action {
-            "create" => "post",
-            "delay" => "put",
-            "delete" => "delete",
-            _ => panic!("error action, valid action: post/put/delete"),
-        };
-
-        let res = self
-            .rest_req(method, path, params, RateLimitParam::Weight(2))
-            .await?;
-        let listen_key = serde_json::from_str::<ListenKey>(&res)?;
-        Ok(listen_key.listen_key)
-    }
-
-    /// 生成或延迟现货账户的ListenKey，
-    /// 如果当前现货账户没有ListenKey，则生成一个新的ListenKey，有效期60分钟，
-    /// 如果当前现货账户已有ListenKey，则延长该ListenKey有效期60分钟并返回该Key
-    #[instrument(skip(self))]
-    pub async fn new_spot_listen_key(&self) -> BiAnResult<String> {
-        let params = PListenKey::new(None, None);
-        let listen_key = self.listen_key("spot", "create", params).await?;
-        Ok(listen_key)
-    }
-
-    /// 延迟现货账户的ListenKey，有效期延长至本次调用后60分钟
-    #[instrument(skip(self))]
-    pub async fn delay_spot_listen_key(&self, listen_key: &str) -> BiAnResult<()> {
-        let params = PListenKey::new(Some(listen_key), None);
-        self.listen_key("spot", "delay", params).await?;
-        Ok(())
-    }
-
-    /// 删除现货账户的ListenKey，将关闭用户数据流
-    #[instrument(skip(self))]
-    pub async fn delete_spot_listen_key(&self, listen_key: &str) -> BiAnResult<()> {
-        let params = PListenKey::new(Some(listen_key), None);
-        self.listen_key("spot", "delete", params).await?;
-
-        Ok(())
-    }
-
-    /// 生成或延迟杠杆账户的ListenKey，如果当前账户没有ListenKey，则生成一个新的ListenKey，有效期60分钟，如果已有，则延长该ListenKey有效期60分钟
-    #[instrument(skip(self))]
-    pub async fn new_margin_listen_key(&self) -> BiAnResult<String> {
-        let params = PListenKey::new(None, None);
-        let listen_key = self.listen_key("margin", "create", params).await?;
-        Ok(listen_key)
-    }
-
-    /// 延迟杠杆账户的ListenKey，有效期延长至本次调用后60分钟
-    #[instrument(skip(self))]
-    pub async fn delay_margin_listen_key(&self, listen_key: &str) -> BiAnResult<()> {
-        let params = PListenKey::new(Some(listen_key), None);
-        self.listen_key("margin", "delay", params).await?;
-        Ok(())
-    }
-
-    /// 删除杠杆账户的ListenKey，将关闭用户数据流
-    #[instrument(skip(self))]
-    pub async fn delete_margin_listen_key(&self, listen_key: &str) -> BiAnResult<()> {
-        let params = PListenKey::new(Some(listen_key), None);
-        self.listen_key("margin", "delete", params).await?;
-
-        Ok(())
-    }
-
-    /// 生成或延迟逐仓杠杆账户的ListenKey，如果当前账户没有ListenKey，则生成一个新的ListenKey，有效期60分钟，如果已有，则延长该ListenKey有效期60分钟
-    #[instrument(skip(self))]
-    pub async fn new_isolated_margin_listen_key(&self, symbol: &str) -> BiAnResult<String> {
-        let params = PListenKey::new(None, Some(symbol));
-        let listen_key = self.listen_key("margin_isolated", "create", params).await?;
-        Ok(listen_key)
-    }
-
-    /// 延迟逐仓杠杆账户的ListenKey，有效期延长至本次调用后60分钟
-    #[instrument(skip(self))]
-    pub async fn delay_isolated_margin_listen_key(
-        &self,
-        listen_key: &str,
-        symbol: &str,
-    ) -> BiAnResult<()> {
-        let params = PListenKey::new(Some(listen_key), Some(symbol));
-        self.listen_key("margin_isolated", "delay", params).await?;
-        Ok(())
-    }
-
-    /// 删除逐仓杠杆账户的ListenKey，将关闭用户数据流
-    #[instrument(skip(self))]
-    pub async fn delete_isolated_margin_listen_key(
-        &self,
-        listen_key: &str,
-        symbol: &str,
-    ) -> BiAnResult<()> {
-        let params = PListenKey::new(Some(listen_key), Some(symbol));
-        self.listen_key("margin_isolated", "delete", params).await?;
-
-        Ok(())
     }
 }

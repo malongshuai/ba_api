@@ -1,7 +1,7 @@
 [package]
 name = "ba_api"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -24,8 +24,6 @@ reqwest = { version = "0.12", features = [
     "charset",
     "macos-system-configuration",
 ], default-features = false }
-ring = { version = "0.17" }
-ed25519-dalek = { version = "2" }
 tokio = { version = "1.31", features = ["net", "fs", "time", "sync", "macros"] }
 rustls = { version = "0.23", features = [
     "ring",
@@ -38,9 +36,8 @@ tokio-tungstenite = { version = "0.26", features = [
 # tokio-tungstenite = { version = "0.23", features = ["native-tls-vendored"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-url = {version = "2"}
-hex = "0.4"
-base64 = "0.22"
+url = { version = "2" }
+uuid = { version = "1", features = ["v4", "serde"] }
 thiserror = "2"
 tracing = "0.1"
 serde_urlencoded = "0.7"

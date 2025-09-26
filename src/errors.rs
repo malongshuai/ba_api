@@ -38,10 +38,16 @@ pub enum BiAnApiError {
     #[error("argument error: {0}")]
     ArgumentError(String),
 
+    #[error("api key missed or wrong")]
+    ApiKeyError,
+
+    #[error("sec/private key missed or wrong")]
+    SecKeyError,
+
     /// ws错误
     #[cfg(feature = "websocket")]
     #[error(transparent)]
-    WsError(#[from] tungstenite::error::Error),
+    WsError(#[from] Box<tungstenite::error::Error>),
 
     /// ws错误，将要订阅的数量超出了限制(币安每个ws连接最多只允许定于1024个Stream)
     #[error("too many subscribes {0}")]

@@ -1,12 +1,12 @@
 use crate::{
+    ExchangeInfo, SymbolInfo,
     client::rate_limit::RateLimitParam,
     errors::{BiAnApiError, BiAnResult, MethodError},
     utils::ExchangeInfoExt,
-    ExchangeInfo, SymbolInfo,
 };
 use ba_global::REST_BASE_URL;
 use ba_types::BadRequest;
-use reqwest::{header, Url};
+use reqwest::{Url, header};
 use serde::Serialize;
 use std::{
     fmt::Debug,
@@ -20,8 +20,8 @@ use tracing::{error, warn};
 use super::{
     params::{CheckType, Param},
     rate_limit::RestApiRateLimits,
-    signature::ed25519_signature,
 };
+use crate::ApiSecKey;
 
 /// REST响应体
 pub(crate) type RespBody = String;
@@ -64,8 +64,7 @@ impl FromStr for RestMethod {
 #[derive(Clone)]
 pub struct RestConn {
     conn: reqwest::Client,
-    api_key: Arc<String>,
-    sec_key: Arc<String>,
+    api_sec_key: ApiSecKey,
     base_url: Url,
     rate_limit: RestApiRateLimits,
     exchange_info: Arc<Option<ExchangeInfo>>,
@@ -74,21 +73,15 @@ pub struct RestConn {
 #[allow(dead_code)]
 impl RestConn {
     ///```rust
-    ///let api_key = "abcdefhijklmnopqrstuvwxyz".to_string();
-    ///let sec_key = "abcdefhijklmnopqrstuvwxyz".to_string();
-    ///let rest_conn = RestConn::new(api_key, sec_key, Some("http://127.0.0.1:8118".to_string()));
+    /// let api_key = Some(Some("abcdefhijklmnopqrstuvwxyz".to_string());
+    /// let sec_key = Some("abcdefhijklmnopqrstuvwxyz".to_string());
+    /// let api_sec_key = ApiSecKey::new(api_key, sec_key);
+    /// let rest_conn = RestConn::new(api_sec_key, Some("http://127.0.0.1:8118".to_string()));
     ///```
-    pub async fn new(api_key: String, sec_key: String, proxy: Option<String>) -> RestConn {
-        let mut header = header::HeaderMap::new();
-        header.insert(
-            "X-MBX-APIKEY",
-            header::HeaderValue::from_str(&api_key).unwrap(),
-        );
-
+    pub async fn new(api_sec_key: ApiSecKey, proxy: Option<String>) -> RestConn {
         // 设置建立连接过程的超时时间5秒
         // 空闲连接永不断开(一直保持长连接)
         let builder = reqwest::Client::builder()
-            .default_headers(header)
             .connect_timeout(time::Duration::from_secs(5))
             .pool_idle_timeout(None);
         // let url = *REST_BASE_URL;
@@ -103,8 +96,7 @@ impl RestConn {
 
         let mut rest_conn = RestConn {
             conn,
-            api_key: Arc::new(api_key),
-            sec_key: Arc::new(sec_key),
+            api_sec_key,
             base_url: Url::parse(REST_BASE_URL).unwrap(),
             rate_limit: RestApiRateLimits::new().await,
             exchange_info: Arc::new(None),
@@ -123,6 +115,11 @@ impl RestConn {
         // };
 
         rest_conn
+    }
+
+    /// 当前连接使用的api sec key
+    pub fn api_sec_key(&self) -> ApiSecKey {
+        self.api_sec_key.clone()
     }
 
     /// 更新exchange_info信息
@@ -183,36 +180,13 @@ impl RestConn {
         P: Serialize + Param + Debug,
     {
         let mut url = self.base_url.join(path).expect("invalid url");
+        let payload = params.payload(&self.api_sec_key);
+        let query = serde_urlencoded::to_string(&payload)
+            .unwrap_or_else(|x| panic!("encoder to url failed: {x}, {payload:?}"));
+        if !query.is_empty() {
+            url.set_query(Some(&query));
+        }
 
-        match params.check_type() {
-            CheckType::None | CheckType::UserStream | CheckType::MarketData => {
-                let query = serde_urlencoded::to_string(params).unwrap();
-                if !query.is_empty() {
-                    url.set_query(Some(&query));
-                }
-            }
-            CheckType::Trade | CheckType::Margin | CheckType::UserData => {
-                let mut query = serde_urlencoded::to_string(params).unwrap();
-                let time_query = format!("recvWindow=5000&timestamp={}", timestamp());
-                // 根据采用的算法不同，signature可能会比较长
-                query.reserve(400);
-                if !query.is_empty() {
-                    query.push('&');
-                }
-                query.push_str(&time_query);
-                // query = if query.is_empty() {
-                //     time_query
-                // } else {
-                //     format!("{}&{}", query, time_query)
-                // };
-
-                let signature = ed25519_signature(&self.sec_key, &query);
-                // query = format!("{}&signature={}", query, signature);
-                query.push('&');
-                query.push_str(&serde_urlencoded::to_string(&signature).unwrap());
-                url.set_query(Some(&query));
-            }
-        };
         url
     }
 
@@ -249,23 +223,13 @@ impl RestConn {
         P: Serialize + Param + Debug,
     {
         let url = self.make_url(path, &params);
+        // 该请求是否需要api_key
+        let need_api_key = !matches!(params.check_type(), CheckType::None);
 
         // 获取限速值, /sapi的接口不做限速处理
         if path.starts_with("/api") {
             self.rate_limit.acquire_permits(rate_limit).await;
         }
-
-        // 不重连的方案
-        // let mut resp = match RestMethod::from_str(method)? {
-        //     RestMethod::Get => self.conn.get(url),
-        //     RestMethod::Post => self.conn.post(url),
-        //     RestMethod::Put => self.conn.put(url),
-        //     RestMethod::Delete => self.conn.delete(url),
-        // }
-        // .send()
-        // .await?;
-        // resp = Self::check_rest_resp(resp).await?;
-        // Ok(resp.text().await.unwrap())
 
         // 尝试重连5次的方案(每隔1秒重试一次)
         let mut retry = 6;
@@ -276,12 +240,26 @@ impl RestConn {
             }
 
             let url = url.clone();
-            let req = match RestMethod::from_str(method)? {
+            let mut req = match RestMethod::from_str(method)? {
                 RestMethod::Get => self.conn.get(url),
                 RestMethod::Post => self.conn.post(url),
                 RestMethod::Put => self.conn.put(url),
                 RestMethod::Delete => self.conn.delete(url),
             };
+
+            if need_api_key {
+                let mut header = header::HeaderMap::new();
+                let api_key = self
+                    .api_sec_key
+                    .api_key()
+                    .ok_or_else(|| BiAnApiError::ApiKeyError)?;
+
+                header.insert(
+                    "X-MBX-APIKEY",
+                    header::HeaderValue::from_str(api_key).unwrap(),
+                );
+                req = req.headers(header);
+            }
 
             match req.send().await {
                 Ok(r) => break Ok(r),
@@ -315,7 +293,7 @@ impl RestConn {
          *  "x-amz-cf-pop": "OSL50-C1", "x-amz-cf-id": "_dwdsdfdas"}
          */
         let head = resp.headers();
-        // println!("header: {:?}", head);
+        // println!("header: {:?}, status: {}", head, resp.status());
         // println!( "+ weight +{:?} {:?}", head.get("x-mbx-used-weight"), head.get("x-mbx-used-weight-1m") );
         // println!( "+ weight +{:?} {:?}", head.get("x-mbx-order-count-10s"), head.get("x-mbx-order-count-1d") );
 
@@ -341,10 +319,10 @@ impl RestConn {
     }
 
     fn extract_weigth_header<T: FromStr>(&self, key: &str, head: &header::HeaderMap) -> Option<T> {
-        if let Some(weight) = head.get(key) {
-            if let Ok(used) = weight.to_str() {
-                return used.parse::<T>().ok();
-            }
+        if let Some(weight) = head.get(key)
+            && let Ok(used) = weight.to_str()
+        {
+            return used.parse::<T>().ok();
         }
         None
     }

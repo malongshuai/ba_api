@@ -77,12 +77,11 @@ pub async fn check_offline(sym: &str) -> BiAnResult<Option<u64>> {
         .await?;
     info!("check offline: {:?}", res);
 
-    if res.data.is_some() {
-        if let Some(off_msg) = res.data {
-            if off_msg.to_delist {
-                return Ok(off_msg.delist_time);
-            }
-        }
+    if res.data.is_some()
+        && let Some(off_msg) = res.data
+        && off_msg.to_delist
+    {
+        return Ok(off_msg.delist_time);
     }
     Ok(None)
 }

@@ -16,7 +16,7 @@ impl RestConn {
     pub async fn dust_list(&self) -> BiAnResult<DustBtc> {
         let path = "/sapi/v1/asset/dust-btc";
         let res = self
-            .rest_req("post", path, PDustBtc, RateLimitParam::Weight(1))
+            .rest_req("post", path, PDustBtc::new(), RateLimitParam::Weight(1))
             .await?;
         let dust_list_info = serde_json::from_str::<DustBtc>(&res)?;
         Ok(dust_list_info)

@@ -26,7 +26,6 @@ pub mod wallet;
 /// 限速规则
 // pub mod rate_limit;
 pub(crate) mod rate_limit;
-pub mod signature;
 // pub mod websocket1;
 
 pub use rest::*;

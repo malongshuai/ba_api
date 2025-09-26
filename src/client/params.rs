@@ -1,10 +1,13 @@
+#![allow(clippy::new_without_default)]
+
+use super::timestamp;
 use crate::{
+    ApiSecKey, KLineInterval, Permission, SubAccountType,
     errors::{BiAnApiError, BiAnResult},
     types::order::{OrderRespType, OrderSide, OrderType, TimeInForce},
-    KLineInterval, SubAccountType,
 };
-use ba_types::Permission;
-use serde::{ser::SerializeStruct, Serialize};
+use serde::{Serialize, ser::SerializeStruct};
+use uuid::Uuid;
 
 /// 将Symbol列表转换为URL参数字符串
 /// 例如，将["BTCUSDT", "ETHUSDT"]转换为字符串：'["BTCUSDT","ETHUSDT"]'
@@ -13,7 +16,7 @@ fn list_2_str(symbols: Vec<&str>) -> Option<String> {
     if symbols.is_empty() {
         return None;
     }
-    let j: Vec<String> = symbols.iter().map(|x| format!(r#""{}""#, x)).collect();
+    let j: Vec<String> = symbols.iter().map(|x| format!(r#""{x}""#)).collect();
     Some(format!("[{}]", j.join(",")))
 }
 
@@ -32,8 +35,8 @@ pub enum CheckType {
 
     /// 需API，需(secret key)签名
     Trade,
-    /// 需API，需(secret key)签名
-    Margin,
+    // /// 需API，需(secret key)签名
+    // Margin,
     /// 需API，需(secret key)签名
     UserData,
 }
@@ -58,14 +61,143 @@ pub trait Param {
     fn rate_limit(&self) -> PRateLimit {
         PRateLimit::ApiIp
     }
+
+    fn payload(&self, api_sec_key: &ApiSecKey) -> PWrapperParams<'_, Self>
+    where
+        Self: Serialize + Sized,
+    {
+        // rest api的api key总是在http header中设置，且签名不需要api_key也作为payload的一部分，所以这里不设置api key
+        let mut wraped_params = PWrapperParams {
+            api_key: None,
+            signature: None,
+            timestamp: None,
+            recv_window: None,
+            params: self,
+        };
+        match self.check_type() {
+            // 不需要签名的
+            CheckType::None | CheckType::UserStream | CheckType::MarketData => wraped_params,
+            // 需要签名
+            CheckType::Trade | CheckType::UserData => {
+                wraped_params.timestamp = Some(timestamp());
+                wraped_params.recv_window = Some(5000);
+
+                let mut query = serde_urlencoded::to_string(&wraped_params).unwrap();
+                // 根据采用的算法不同，signature可能会比较长
+                query.reserve(1000);
+
+                let signature = api_sec_key.signature(&query).unwrap();
+                wraped_params.signature = Some(signature.signature);
+                wraped_params
+            }
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]
-pub struct PPing;
+pub struct PWebSocketApi<'a, T>
+where
+    T: Serialize + Param,
+{
+    pub id: Uuid,
+    method: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    params: Option<PWrapperParams<'a, T>>,
+}
+
+impl<'a, T> PWebSocketApi<'a, T>
+where
+    T: Serialize + Param,
+{
+    pub fn new(api_sec_key: &'a ApiSecKey, method: &'static str, params: Option<&'a T>) -> Self {
+        if params.is_none() {
+            return Self {
+                id: Uuid::new_v4(),
+                method,
+                params: None,
+            };
+        }
+        let mut wrap_params = PWrapperParams {
+            params: params.unwrap(),
+            api_key: None,
+            recv_window: None,
+            timestamp: None,
+            signature: None,
+        };
+        wrap_params.payload(api_sec_key);
+
+        Self {
+            id: Uuid::new_v4(),
+            method,
+            params: Some(wrap_params),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct PWrapperParams<'a, T>
+where
+    T: Serialize + Param,
+{
+    /// 各种具体的参数类型
+    #[serde(flatten)]
+    params: &'a T,
+    /// Rest API接口不要设置api_key，rest api接口签名时不应加入api_key payload
+    #[serde(rename = "apiKey", skip_serializing_if = "Option::is_none")]
+    api_key: Option<&'a str>,
+    #[serde(rename = "recvWindow", skip_serializing_if = "Option::is_none")]
+    recv_window: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    timestamp: Option<u128>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    signature: Option<String>,
+}
+
+impl<'a, T> PWrapperParams<'a, T>
+where
+    T: Serialize + Param,
+{
+    fn payload(&mut self, api_sec_key: &'a ApiSecKey) {
+        match self.params.check_type() {
+            // 不需要API
+            CheckType::None => {}
+            // 需要API但不需要签名，也不需要timestamp和revWindow
+            CheckType::UserStream | CheckType::MarketData => {
+                self.api_key = api_sec_key.api_key();
+            }
+            // 需要签名，且签名时需要将api_key纳入签名的payload
+            CheckType::Trade | CheckType::UserData => {
+                self.api_key = api_sec_key.api_key();
+                self.timestamp = Some(timestamp());
+                self.recv_window = Some(5000);
+
+                let mut query = serde_urlencoded::to_string(&self).unwrap();
+                // 根据采用的算法不同，signature可能会比较长
+                query.reserve(1000);
+
+                let signature = api_sec_key.signature(&query).unwrap();
+                self.signature = Some(signature.signature);
+            }
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct PPing {}
+impl PPing {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
 impl Param for PPing {}
 
 #[derive(Debug, Serialize)]
-pub struct PServerTime;
+pub struct PServerTime {}
+impl PServerTime {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
 impl Param for PServerTime {}
 
 #[derive(Debug)]
@@ -94,9 +226,9 @@ impl<'a> PExchangeInfo<'a> {
         }
     }
 }
-impl<'a> Param for PExchangeInfo<'a> {}
+impl Param for PExchangeInfo<'_> {}
 
-impl<'a> Serialize for PExchangeInfo<'a> {
+impl Serialize for PExchangeInfo<'_> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -119,7 +251,7 @@ impl<'a> Serialize for PExchangeInfo<'a> {
         let ele = self
             .permissions
             .iter()
-            .map(|p| format!(r#""{}""#, p))
+            .map(|p| format!(r#""{p}""#))
             .collect::<Vec<_>>();
         let serialized_permissions = format!("[{}]", ele.join(","));
         state.serialize_field("permissions", &serialized_permissions)?;
@@ -185,7 +317,7 @@ pub struct PDepth<'a> {
     limit: Option<u16>,
 }
 impl PDepth<'_> {
-    pub fn new(symbol: &str, limit: Option<u16>) -> BiAnResult<PDepth> {
+    pub fn new(symbol: &str, limit: Option<u16>) -> BiAnResult<PDepth<'_>> {
         Ok(PDepth { symbol, limit })
     }
 }
@@ -197,7 +329,7 @@ pub struct PTrades<'a> {
     limit: Option<u16>,
 }
 impl PTrades<'_> {
-    pub fn new(symbol: &str, limit: Option<u16>) -> BiAnResult<PTrades> {
+    pub fn new(symbol: &str, limit: Option<u16>) -> BiAnResult<PTrades<'_>> {
         // if let Some(n) = limit {
         //     if n >= 1000 {
         //         return Err(RestApiError::ArgumentError(format!(
@@ -220,10 +352,10 @@ pub struct PHistoricalTrades<'a> {
 }
 impl PHistoricalTrades<'_> {
     pub fn new(
-        symbol: &str,
+        symbol: &'_ str,
         limit: Option<u16>,
         from_id: Option<u64>,
-    ) -> BiAnResult<PHistoricalTrades> {
+    ) -> BiAnResult<PHistoricalTrades<'_>> {
         // if let Some(n) = limit {
         //     if n >= 1000 {
         //         return Err(RestApiError::ArgumentError(format!(
@@ -253,12 +385,12 @@ pub struct PAggTrades<'a> {
 }
 impl PAggTrades<'_> {
     pub fn new(
-        symbol: &str,
+        symbol: &'_ str,
         from_id: Option<u64>,
         start_time: Option<u64>,
         end_time: Option<u64>,
         limit: Option<u16>,
-    ) -> BiAnResult<PAggTrades> {
+    ) -> BiAnResult<PAggTrades<'_>> {
         // if let Some(n) = limit {
         //     if n >= 1000 {
         //         return Err(RestApiError::ArgumentError(format!(
@@ -273,22 +405,20 @@ impl PAggTrades<'_> {
             (Some(s), Some(e)) => {
                 if s >= e {
                     return Err(BiAnApiError::ArgumentError(format!(
-                        "start_time({}) should small than end_time({})",
-                        s, e
+                        "start_time({s}) should small than end_time({e})",
                     )));
                 }
 
                 if (e - s) > 3_600_000 {
                     return Err(BiAnApiError::ArgumentError(format!(
-                        "end_time({}) - start_time({}) should great than 1hour",
-                        e, s
+                        "end_time({e}) - start_time({s}) should great than 1hour",
                     )));
                 }
             }
             _ => {
                 return Err(BiAnApiError::ArgumentError(String::from(
                     "invalid start_time or end_time",
-                )))
+                )));
             }
         }
 
@@ -309,8 +439,11 @@ impl Param for PAggTrades<'_> {}
 pub struct PKLine {
     symbol: String,
     interval: KLineInterval,
+    #[serde(skip_serializing_if = "Option::is_none")]
     start_time: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     end_time: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     limit: Option<u16>,
 }
 
@@ -326,13 +459,12 @@ impl PKLine {
         end_time: Option<u64>,
         limit: Option<u16>,
     ) -> BiAnResult<Self> {
-        if let (Some(s), Some(e)) = (start_time, end_time) {
-            if s >= e {
-                return Err(BiAnApiError::ArgumentError(format!(
-                    "start_time({}) should small than end_time({})",
-                    s, e
-                )));
-            }
+        if let (Some(s), Some(e)) = (start_time, end_time)
+            && s >= e
+        {
+            return Err(BiAnApiError::ArgumentError(format!(
+                "start_time({s}) should small than end_time({e})",
+            )));
         }
 
         Ok(Self {
@@ -465,44 +597,41 @@ impl POrder {
         match ot {
             OrderType::Limit => {
                 if !(tif.is_some() && qty.is_some() && price.is_some()) {
-                    return Err(BiAnApiError::ArgumentError(
-                      format!("time_in_force({:?}), qty({:?}) and price({:?}) can't be omitted when order type is LIMIT",
-                      tif, qty, price)));
+                    return Err(BiAnApiError::ArgumentError(format!(
+                        "time_in_force({tif:?}), qty({qty:?}) and price({price:?}) can't be omitted when order type is LIMIT",
+                    )));
                 }
             }
             OrderType::Market => {
                 if qty.is_none() && quote_order_qty.is_none() {
-                    return Err(BiAnApiError::ArgumentError(
-                      format!("qty({:?}) and quote_order_qty({:?}) can't be omitted when order type is MARKET", 
-                      qty, quote_order_qty)));
+                    return Err(BiAnApiError::ArgumentError(format!(
+                        "qty({qty:?}) and quote_order_qty({quote_order_qty:?}) can't be omitted when order type is MARKET",
+                    )));
                 }
                 if tif.is_some() {
                     return Err(BiAnApiError::ArgumentError(format!(
-                        "TimeInForce({:?}) can't be set when order type is MARKET",
-                        tif
+                        "TimeInForce({tif:?}) can't be set when order type is MARKET",
                     )));
                 }
             }
             OrderType::StopLoss | OrderType::TakeProfit => {
                 if !(qty.is_some() && stop_price.is_some()) {
-                    return Err(BiAnApiError::ArgumentError(
-                      format!("qty({:?}) and stop_price({:?}) can't be omitted when order type is STOP_LOSS or TAKE_PROFIT",
-                       qty, stop_price)));
+                    return Err(BiAnApiError::ArgumentError(format!(
+                        "qty({qty:?}) and stop_price({stop_price:?}) can't be omitted when order type is STOP_LOSS or TAKE_PROFIT",
+                    )));
                 }
             }
             OrderType::StopLossLimit | OrderType::TakeProfitLimit => {
                 if !(tif.is_some() && qty.is_some() && price.is_some() && stop_price.is_some()) {
-                    return Err(BiAnApiError::ArgumentError(
-                      format!("time_in_force({:?}), qty({:?}), price({:?}) and stop_price({:?}) can't be omitted when order type is STOP_LOSS_LIMIT or TAKE_PROFIT_LIMIT",
-                       tif, qty, price, stop_price)
-                    ));
+                    return Err(BiAnApiError::ArgumentError(format!(
+                        "time_in_force({tif:?}), qty({qty:?}), price({price:?}) and stop_price({stop_price:?}) can't be omitted when order type is STOP_LOSS_LIMIT or TAKE_PROFIT_LIMIT",
+                    )));
                 }
             }
             OrderType::LimitMaker => {
                 if !(qty.is_some() && price.is_some()) {
                     return Err(BiAnApiError::ArgumentError(format!(
-                        "qty({:?}) and price({:?}) can't be omitted when order type is LIMIT_MAKER",
-                        qty, price
+                        "qty({qty:?}) and price({price:?}) can't be omitted when order type is LIMIT_MAKER",
                     )));
                 }
             }
@@ -671,7 +800,12 @@ impl Param for PAllOrders {
 
 /// 现货交易对下架计划
 #[derive(Debug, Serialize)]
-pub struct PDelist;
+pub struct PDelist {}
+impl PDelist {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
 impl Param for PDelist {
     fn check_type(&self) -> CheckType {
         CheckType::MarketData
@@ -680,7 +814,12 @@ impl Param for PDelist {
 
 /// 现货交易对下架计划
 #[derive(Debug, Serialize)]
-pub struct PCapital;
+pub struct PCapital {}
+impl PCapital {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
 impl Param for PCapital {
     fn check_type(&self) -> CheckType {
         CheckType::UserData
@@ -740,7 +879,12 @@ impl Param for PMyTrades {
 }
 
 #[derive(Debug, Serialize)]
-pub struct PRateLimitInfo;
+pub struct PRateLimitInfo {}
+impl PRateLimitInfo {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
 impl Param for PRateLimitInfo {
     fn check_type(&self) -> CheckType {
         CheckType::Trade
@@ -769,7 +913,12 @@ impl Param for PListenKey {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct PDustBtc;
+pub struct PDustBtc {}
+impl PDustBtc {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
 impl Param for PDustBtc {
     fn check_type(&self) -> CheckType {
         CheckType::UserData
@@ -903,12 +1052,92 @@ impl Param for PSubAccountUniversalTransfer<'_> {
 }
 
 #[derive(Debug, Serialize)]
-pub struct PAccountInfo;
+pub struct PAccountInfo {}
+impl PAccountInfo {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
 impl Param for PAccountInfo {
     fn check_type(&self) -> CheckType {
         CheckType::UserData
     }
     fn rate_limit(&self) -> PRateLimit {
         PRateLimit::ApiUid
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct PSessionLogon {}
+impl PSessionLogon {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+impl Param for PSessionLogon {
+    fn check_type(&self) -> CheckType {
+        CheckType::UserData
+    }
+    fn rate_limit(&self) -> PRateLimit {
+        PRateLimit::ApiUid
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct PSessionStatus {}
+impl PSessionStatus {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+impl Param for PSessionStatus {}
+
+#[derive(Debug, Serialize)]
+pub struct PSessionLogout {}
+impl PSessionLogout {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+impl Param for PSessionLogout {}
+
+#[derive(Debug, Serialize)]
+pub struct PUserDataStream {}
+impl PUserDataStream {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+impl Param for PUserDataStream {
+    fn check_type(&self) -> CheckType {
+        CheckType::UserStream
+    }
+    fn rate_limit(&self) -> PRateLimit {
+        PRateLimit::ApiUid
+    }
+}
+
+#[cfg(test)]
+mod tt {
+    use serde::Serialize;
+
+    #[test]
+    fn t() {
+        #[derive(Serialize)]
+        struct Dd {
+            a: Option<String>,
+            b: Option<String>,
+            #[serde(flatten)]
+            inner: Inner,
+        }
+
+        #[derive(Serialize)]
+        struct Inner {}
+        let d = Dd {
+            a: Some("123".to_string()),
+            b: Some("abc".to_string()),
+            inner: Inner {},
+        };
+        println!("{:?}", serde_urlencoded::to_string(&d));
     }
 }

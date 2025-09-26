@@ -7,11 +7,11 @@ use super::{
 };
 use {
     super::{
+        RestConn,
         params::{
             PAggTrades, PAvgPrice, PBookTicker, PDepth, PExchangeInfo, PHistoricalTrades, PHr24,
             PKLine, PPing, PPrice, PServerTime, PTrades,
         },
-        RestConn,
     },
     crate::errors::BiAnResult,
     crate::types::depth::Depth,
@@ -32,7 +32,7 @@ impl RestConn {
     pub async fn ping(&self) -> BiAnResult<bool> {
         let path = "/api/v3/ping";
         let res = self
-            .rest_req("get", path, PPing, RateLimitParam::Weight(1))
+            .rest_req("get", path, PPing::new(), RateLimitParam::Weight(1))
             .await?;
         Ok(res == "{}")
     }
@@ -42,7 +42,7 @@ impl RestConn {
     pub async fn server_time(&self) -> BiAnResult<u64> {
         let path = "/api/v3/time";
         let res = self
-            .rest_req("get", path, PServerTime, RateLimitParam::Weight(1))
+            .rest_req("get", path, PServerTime::new(), RateLimitParam::Weight(1))
             .await?;
         let time_res = serde_json::from_str::<ServerTime>(&res)?;
         Ok(time_res.server_time)
@@ -86,10 +86,10 @@ impl RestConn {
         let bian_dir = app_dir().unwrap().join("bian");
         let exchange_info_file = bian_dir.join("exchange_info.json");
         let c_res = fs::create_dir_all(&bian_dir).await;
-        if c_res.is_ok() {
-            if let Ok(Some(exchange_info)) = Self::local_exchange_info(&exchange_info_file).await {
-                return Ok(exchange_info);
-            }
+        if c_res.is_ok()
+            && let Ok(Some(exchange_info)) = Self::local_exchange_info(&exchange_info_file).await
+        {
+            return Ok(exchange_info);
         }
 
         let res = self
@@ -319,7 +319,7 @@ impl RestConn {
     pub async fn delist_schedule(&self) -> BiAnResult<DelistSchedule> {
         let path = "/sapi/v1/spot/delist-schedule";
         let res = self
-            .rest_req("get", path, PDelist, RateLimitParam::Weight(100))
+            .rest_req("get", path, PDelist::new(), RateLimitParam::Weight(100))
             .await?;
         let infos = serde_json::from_str::<DelistSchedule>(&res)?;
         Ok(infos)
@@ -330,7 +330,7 @@ impl RestConn {
     pub async fn capital(&self) -> BiAnResult<String> {
         let path = "/sapi/v1/capital/config/getall";
         let res = self
-            .rest_req("get", path, PCapital, RateLimitParam::Weight(10))
+            .rest_req("get", path, PCapital::new(), RateLimitParam::Weight(10))
             .await?;
         Ok(res)
         // let infos = serde_json::from_str::<DelistSchedule>(&res)?;

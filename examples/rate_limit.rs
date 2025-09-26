@@ -1,6 +1,6 @@
 #![allow(dead_code, unused_variables)]
 
-use ba_api::client::RestConn;
+use ba_api::{client::RestConn, ApiSecKey};
 
 fn api_key() -> Option<String> {
     std::env::var("BA_API_KEY").ok()
@@ -10,6 +10,10 @@ fn sec_key() -> Option<String> {
     std::env::var("BA_SEC_KEY").ok()
 }
 
+fn api_sec_key() -> ApiSecKey {
+    ApiSecKey::new(api_key(), sec_key())
+}
+
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt()
@@ -17,7 +21,7 @@ async fn main() {
         .init();
 
     // 创建http连接
-    let rest_conn = RestConn::new(api_key().unwrap(), sec_key().unwrap(), None).await;
+    let rest_conn = RestConn::new(api_sec_key(), None).await;
 
     let b = rest_conn.dust_list().await;
     println!("{:?}", b)

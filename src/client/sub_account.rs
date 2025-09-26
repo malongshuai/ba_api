@@ -103,7 +103,7 @@ impl RestConn {
     pub async fn account_info(&self) -> BiAnResult<AccountInfo> {
         let path = "/sapi/v1/account/info";
         let res = self
-            .rest_req("get", path, PAccountInfo, RateLimitParam::Weight(1))
+            .rest_req("get", path, PAccountInfo::new(), RateLimitParam::Weight(1))
             .await?;
         let account_info = serde_json::from_str::<AccountInfo>(&res)?;
         Ok(account_info)

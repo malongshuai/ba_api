@@ -1,29 +1,37 @@
+use super::params::{PKLine, PSessionLogon, PSessionStatus, PUserDataStream, PWebSocketApi, Param};
 use crate::{
+    ApiSecKey, KLineInterval, WebsocketApiResponse, WsResponse,
     errors::{BiAnApiError, BiAnResult},
-    KLineInterval,
 };
 use ba_global::{WS_API_URL, WS_STREAM_URL};
-use ba_types::WsResponse;
 use concat_string::concat_string;
 use futures_util::{
-    stream::{SplitSink, SplitStream},
     SinkExt, StreamExt,
+    stream::{SplitSink, SplitStream},
 };
-use std::{collections::HashSet, sync::Arc, time::Duration};
+use serde::Serialize;
+use std::{
+    collections::HashSet,
+    sync::{
+        Arc,
+        atomic::{self, AtomicBool},
+    },
+    time::Duration,
+};
 use tokio::{
     net::TcpStream,
-    sync::{mpsc, RwLock},
+    sync::{RwLock, mpsc},
     task::{JoinHandle, JoinSet},
 };
 use tokio_tungstenite::{
-    connect_async,
+    MaybeTlsStream, WebSocketStream, connect_async,
     tungstenite::{
-        protocol::{frame::coding::CloseCode, CloseFrame},
         Message, Utf8Bytes,
+        protocol::{CloseFrame, frame::coding::CloseCode},
     },
-    MaybeTlsStream, WebSocketStream,
 };
-use tracing::{debug, error, warn};
+use tracing::{debug, error, info, warn};
+use uuid::Uuid;
 
 type WsSink = SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>;
 type WsStream = SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>;
@@ -33,8 +41,6 @@ pub enum ChannelPath {
     /// 订阅行情数据流，
     /// 空的MarketPath表示暂时不订阅，而是等待以后手动添加订阅
     MarketStream(HashSet<String>),
-    /// 订阅账户数据
-    ListenKey(String),
     /// websocket API，不需要额外参数，而是在请求时发送参数
     Api,
 }
@@ -45,7 +51,6 @@ impl ChannelPath {
     fn to_path(&self) -> String {
         match self {
             Self::MarketStream(s) => Vec::from_iter(s.iter().map(|x| x.as_str())).join("/"),
-            Self::ListenKey(l) => l.into(),
             Self::Api => String::new(),
         }
     }
@@ -63,20 +68,11 @@ impl ChannelPath {
         Self::MarketStream(HashSet::default())
     }
 
-    /// 订阅行情数据，
-    /// ```
-    /// ChannelPath::listen_key_path("djkas812klkadjkflaslkdfasd".to_string());
-    /// ```
-    fn listen_key_path(listen_key: String) -> Self {
-        Self::ListenKey(listen_key)
-    }
-
     /// 向MarketStreamPath中添加数据，如果是ListenKey类型，则不做任何事情
     /// 用于手动订阅时添加指定要订阅的channel
     fn extend(&mut self, contents: HashSet<String>) {
         match self {
             ChannelPath::MarketStream(h) => h.extend(contents),
-            ChannelPath::ListenKey(_) => {}
             ChannelPath::Api => {}
         }
     }
@@ -88,7 +84,6 @@ impl ChannelPath {
             ChannelPath::MarketStream(h) => {
                 h.remove(data);
             }
-            ChannelPath::ListenKey(_) => {}
             ChannelPath::Api => {}
         }
     }
@@ -116,7 +111,6 @@ impl WS {
                     // format!("{}/stream", WS_BASE_URL)
                 }
             }
-            ChannelPath::ListenKey(key) => concat_string!(WS_STREAM_URL, "/stream?streams=", key),
             ChannelPath::Api => WS_API_URL.into(),
         }
     }
@@ -134,13 +128,12 @@ impl WS {
                     return Err(BiAnApiError::TooManySubscribes(v.len()));
                 }
             }
-            ChannelPath::ListenKey(_) => {}
             ChannelPath::Api => {}
         }
 
         let url = Self::ws_url(&channel_path);
 
-        let (ws_stream, _response) = connect_async(&url).await?;
+        let (ws_stream, _response) = connect_async(&url).await.map_err(Box::new)?;
         let (ws_writer, ws_reader) = ws_stream.split();
 
         Ok(WS {
@@ -149,10 +142,6 @@ impl WS {
             channel_path: RwLock::new(channel_path),
         })
     }
-
-    // fn tls_connector() {
-
-    // }
 
     /// 创建一个新的WebSocketStream，并将其替换该ws连接内部已有的WebSocketStream  
     async fn replace_inner_stream(&self) {
@@ -185,48 +174,13 @@ impl WS {
             reason: Utf8Bytes::from_static("force close"),
         };
         let msg = Message::Close(Some(close_frame));
-        self.ws_writer.write().await.send(msg).await?;
+        self.ws_writer
+            .write()
+            .await
+            .send(msg)
+            .await
+            .map_err(Box::new)?;
         Ok(())
-    }
-
-    /// 处理ws接收到的信息，并且在接收到ws关闭信息的时候替换重建ws
-    /// 返回Some(close_reason)表示要重建ws，返回None表示一切正常无需重建
-    async fn handle_msg(
-        &self,
-        msg: Message,
-        data_sender: &mpsc::Sender<WsResponse>,
-    ) -> Option<String> {
-        match msg {
-            Message::Text(data) => {
-                match serde_json::from_slice::<WsResponse>(data.as_bytes()) {
-                    Ok(d) => {
-                        if data_sender.send(d).await.is_err() {
-                            error!("Data Receiver is closed");
-                        }
-                    }
-                    Err(e) => {
-                        // 接收到无法解析的内容不停止，继续从websocket里等待数据
-                        error!(
-                            "Ws Message Decode to WsResponse Error, error: {e}, msg content: {}",
-                            data.as_str()
-                        );
-                    }
-                }
-            }
-            Message::Ping(d) => {
-                debug!("received Ping Frame");
-                let msg = Message::Pong(d);
-                if let Err(e) = self.ws_writer.write().await.send(msg).await {
-                    error!("ws closed: {}, <{}>", e, self.channel_path().await);
-                }
-            }
-            Message::Close(Some(data)) => {
-                warn!("recv CloseFrame: {}", data.code);
-                return Some(data.reason.to_string());
-            }
-            _ => (),
-        }
-        None
     }
 
     /// 列出订阅内容，可用于检查是否订阅成功
@@ -247,7 +201,6 @@ impl WS {
     async fn stream_subscribe(&self, channel_path: ChannelPath, id: u64) {
         let contents = match channel_path {
             ChannelPath::MarketStream(s) => s,
-            ChannelPath::ListenKey(_) => panic!("subscribe account data not allowed"),
             ChannelPath::Api => panic!("subscribe websocket api not allowed"),
         };
 
@@ -271,7 +224,6 @@ impl WS {
     async fn stream_unsubscribe(&self, channel_path: ChannelPath, id: u64) {
         let contents = match channel_path {
             ChannelPath::MarketStream(s) => s,
-            ChannelPath::ListenKey(_) => panic!("unsubscribe account data not allowed"),
             ChannelPath::Api => panic!("unsubscribe websocket api not allowed"),
         };
         let json_text = serde_json::json!({
@@ -297,14 +249,19 @@ impl WS {
 /// ws连接，只支持订阅组合Stream，以及手动订阅和取消订阅
 ///
 /// (参考<https://binance-docs.github.io/apidocs/spot/cn/#websocket>)
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 #[must_use = "`WsClient` must be use"]
 pub struct WsClient {
     // 不使用DashMap，因为它在不切换任务的过程中重复get_mut时，不会释放锁，
     // 相邻两次之间必须至少有一个额外的异步任务才可以，比如`tokio::task::yield_now().await`
     // pub ws: Arc<DashMap<(), WS>>,
     ws: Arc<WS>,
+    api_sec_key: ApiSecKey,
     close_sender: mpsc::Sender<bool>,
+    /// 是否登录了
+    logon_flag: Arc<AtomicBool>,
+    /// 是否订阅了 user data stream
+    uds_subscribed: Arc<AtomicBool>,
 }
 
 impl WsClient {
@@ -342,6 +299,9 @@ impl WsClient {
         let s = Self {
             ws: Arc::new(ws),
             close_sender,
+            api_sec_key: ApiSecKey::default(),
+            logon_flag: Arc::new(AtomicBool::new(false)),
+            uds_subscribed: Arc::new(AtomicBool::new(false)),
         };
 
         let task = {
@@ -420,7 +380,7 @@ impl WsClient {
                     if let Some(msg) = msg {
                         match msg {
                             Ok(msg) => {
-                                if let Some(err_msg) = self.ws.handle_msg(msg, &data_sender).await {
+                                if let Some(err_msg) = self.handle_msg(msg, &data_sender).await {
                                     break err_msg;
                                 }
                             }
@@ -432,8 +392,68 @@ impl WsClient {
                 }
             };
             warn!("ws closed: {}, {}", err_msg, self.ws.channel_path().await);
+
+            // 重建连接时，如果已经登录或已经订阅账户数据，则也重新登录、订阅
             self.ws.replace_inner_stream().await;
+            if self.logon_flag.load(atomic::Ordering::Acquire) {
+                info!("session re-logon");
+                let _ = self.session_logon().await;
+            }
+            if self.uds_subscribed.load(atomic::Ordering::Acquire) {
+                info!("session re-subscribe user data stream");
+                let _ = self.user_data_stream_subscribe().await;
+            }
         }
+    }
+
+    /// 处理ws接收到的信息，并且在接收到ws关闭信息的时候替换重建ws
+    /// 返回Some(close_reason)表示要重建ws，返回None表示一切正常无需重建
+    async fn handle_msg(
+        &self,
+        msg: Message,
+        data_sender: &mpsc::Sender<WsResponse>,
+    ) -> Option<String> {
+        match msg {
+            Message::Text(data) => {
+                // warn!("websocket recv: {}", data.as_str());
+                match serde_json::from_slice::<WsResponse>(data.as_bytes()) {
+                    Ok(resp) => {
+                        // 如果是登录、订阅账户更新的消息，则保存连接当前是否已经登录、是否已经订阅的状态
+                        if let WsResponse::ApiResp(r) = &resp
+                            && let WebsocketApiResponse::LogonInfo(i) = &r.result
+                        {
+                            self.logon_flag
+                                .store(i.authorized_since.is_some(), atomic::Ordering::Release);
+                            self.uds_subscribed
+                                .store(i.user_data_stream, atomic::Ordering::Release);
+                        }
+                        if data_sender.send(resp).await.is_err() {
+                            error!("Data Receiver is closed");
+                        }
+                    }
+                    Err(e) => {
+                        // 接收到无法解析的内容不停止，继续从websocket里等待数据
+                        error!(
+                            "Ws Message Decode to WsResponse Error, error: {e}, msg content: {}",
+                            data.as_str()
+                        );
+                    }
+                }
+            }
+            Message::Ping(d) => {
+                debug!("received Ping Frame");
+                let msg = Message::Pong(d);
+                if let Err(e) = self.ws.ws_writer.write().await.send(msg).await {
+                    error!("ws closed: {}, <{}>", e, self.ws.channel_path().await);
+                }
+            }
+            Message::Close(Some(data)) => {
+                warn!("recv CloseFrame: {}", data.code);
+                return Some(data.reason.to_string());
+            }
+            _ => (),
+        }
+        None
     }
 
     /// 读取关闭WsClient的信号
@@ -457,14 +477,9 @@ impl WsClient {
             }
         }
     }
+}
 
-    /// 订阅websocket api连接，
-    /// 1.可以发送类似于rest api的请求(比如下单、撤单、获取K线等), 并获得响应
-    /// 2.也可以登录之后订阅账户信息变更时推送的数据流
-    pub async fn api(data_sender: mpsc::Sender<WsResponse>) -> BiAnResult<(Self, JoinHandle<()>)> {
-        Self::new(ChannelPath::Api, data_sender).await
-    }
-
+impl WsClient {
     /// 以ws_client的方式订阅"归集交易流"(该操作不会"阻塞"当前异步任务)  
     /// 归集交易 stream 推送交易信息，是对单一订单的集合  
     /// symbols参数忽略大小写  
@@ -627,14 +642,160 @@ impl WsClient {
 
         Self::new(ChannelPath::market_stream_path(channel_path), data_sender).await
     }
+}
 
-    /// 以ws_client的方式订阅"Websocket账户信息推送"(该操作不会"阻塞"当前异步任务)  
+impl WsClient {
+    /// 订阅websocket api连接，
+    /// 1.可以发送类似于rest api的请求(比如下单、撤单、获取K线等), 并获得响应
+    /// 2.也可以登录之后订阅账户信息变更时推送的数据流
     ///
-    /// 包括账户更新、余额更新、订单更新，参考(<https://binance-docs.github.io/apidocs/spot/cn/#websocket-2>)  
-    pub async fn account(
-        listen_key: String,
+    /// 所有这类请求发送后都会返回一个Uuid，api websocket每次对其响应都会带上Uuid以便区分，
+    /// 但 api websocket 除了对每次请求的响应，如果用户还请求过订阅账户信息更新后推送的数据，
+    /// 那么所有这类账户更新的推送内容不会带上Uuid，而是以Event的方式作为响应
+    ///
+    /// ```rust
+    /// let (data_sender, mut data_receiver) = mpsc::channel::<WsResponse>(1000);
+    /// let (ws, task_handle) = WsClient::ws_api(api_sec_key, data_sender).await;
+    ///
+    /// // 订阅账户数据更新、余额更新、订单更新等推送
+    /// tokio::spawn(async move {
+    ///     ws.session_logon().await;
+    ///     ws.user_data_stream_subscribe().await;
+    /// });
+    /// // 获取一部分K线
+    /// tokio::spawn(async move {
+    ///     let _uuid = ws.klines("BTCUSDT", "1m", Some(1735896120000), None, Some(10)).await;
+    /// });
+    /// while let Some(x) = data_receiver.recv().await {
+    ///     info!("account received: {:?}", x);
+    ///     match x {
+    ///         // 市场数据更新推送
+    ///         WsResponse::MarketStream(ws_market_stream_resp) => todo!(),
+    ///         // 账户数据更新推送(比如余额更新，订单更新)
+    ///         WsResponse::UserDataStream(ws_user_data_stream_resp) => todo!(),
+    ///         // 订阅市场数据、取消订阅市场数据、查询订阅状态时的单次响应
+    ///         WsResponse::MarketStreamSubscribe(ws_subscribe_resp) => todo!(),
+    ///         // 发送类似于Rest Api功能的请求后的单次响应，比如获取一段区间的K线数据
+    ///         WsResponse::ApiResp(ws_api_resp) => todo!(),
+    ///     }
+    /// }
+    /// ```
+    pub async fn ws_api(
+        api_sec_key: ApiSecKey,
         data_sender: mpsc::Sender<WsResponse>,
     ) -> BiAnResult<(Self, JoinHandle<()>)> {
-        Self::new(ChannelPath::listen_key_path(listen_key), data_sender).await
+        let (mut s, j) = Self::new(ChannelPath::Api, data_sender).await?;
+        s.api_sec_key = api_sec_key;
+        Ok((s, j))
+    }
+
+    /// 向websocket api连接发送请求，必须已经设置好了api_key(即必须通过`ws_api()`方法创建websocket连接)，否则将返回Error
+    pub async fn send_api_req<T>(
+        &self,
+        method: &'static str,
+        params: Option<&T>,
+    ) -> BiAnResult<Uuid>
+    where
+        T: Serialize + Param,
+    {
+        if self.api_sec_key.is_api_empty() {
+            return Err(BiAnApiError::ApiKeyError);
+        }
+        let param = PWebSocketApi::new(&self.api_sec_key, method, params);
+        let msg_str = serde_json::to_string(&param).unwrap();
+        let msg = Message::Text(msg_str.as_str().into());
+        match self.ws.ws_writer.write().await.send(msg).await {
+            Ok(_) => {
+                info!("msg send to websocket: {msg_str}")
+            }
+            Err(e) => {
+                error!("websocket connect closed: {}", e);
+            }
+        }
+
+        Ok(param.id)
+    }
+
+    /// 会话登录，将等待登录成功
+    pub async fn session_logon(&self) -> BiAnResult<Uuid> {
+        let uuid = self
+            .send_api_req("session.logon", Some(&PSessionLogon::new()))
+            .await?;
+
+        let short_dur = tokio::time::Duration::from_millis(100);
+        let long_dur = tokio::time::Duration::from_secs(10);
+        let mut n = 0;
+        while !self.logon_flag.load(atomic::Ordering::Acquire) {
+            if n >= 100 {
+                tokio::time::sleep(long_dur).await;
+            } else {
+                tokio::time::sleep(short_dur).await;
+            }
+            n += 1;
+        }
+        info!("session logon successed: {uuid}");
+        Ok(uuid)
+    }
+
+    /// 会话状态查看
+    pub async fn session_status(&self) -> BiAnResult<Uuid> {
+        self.send_api_req("session.status", <Option<&PSessionStatus>>::None)
+            .await
+    }
+
+    /// 订阅账户数据流，要求先通过`session.logon`登录，
+    /// 并且订阅操作和登录操作中间应当有一小段延迟，否则可能还未登录成功就请求订阅，会失败，
+    ///
+    /// 将等待订阅成功，订阅成功后不会阻塞
+    pub async fn user_data_stream_subscribe(&self) -> BiAnResult<Uuid> {
+        let uuid = self
+            .send_api_req("userDataStream.subscribe", <Option<&PUserDataStream>>::None)
+            .await?;
+
+        // 为了更新订阅是否成功的状态，不断发送`session.status`进行查询
+        let short_dur = tokio::time::Duration::from_millis(100);
+        let long_dur = tokio::time::Duration::from_secs(10);
+        let mut n = 0;
+        while !self.uds_subscribed.load(atomic::Ordering::Acquire) {
+            if n >= 100 {
+                tokio::time::sleep(long_dur).await;
+            } else {
+                tokio::time::sleep(short_dur).await;
+            }
+            // 如果睡完之后已经变成了true，则不要再发送多余的查询请求
+            if self.uds_subscribed.load(atomic::Ordering::Acquire) {
+                break;
+            }
+            let _ = self.session_status().await;
+            n += 1;
+        }
+
+        info!("user data stream subscribe successed: {uuid}");
+        Ok(uuid)
+    }
+
+    /// 取消订阅账户数据流
+    pub async fn user_data_stream_unsubscribe(&self) -> BiAnResult<Uuid> {
+        let uuid = self
+            .send_api_req(
+                "userDataStream.unsubscribe",
+                <Option<&PUserDataStream>>::None,
+            )
+            .await?;
+        self.uds_subscribed.store(false, atomic::Ordering::Release);
+        Ok(uuid)
+    }
+
+    /// 要求先设置 api key，即必须先通过`ws_api()`创建websocket连接，再发起请求
+    pub async fn klines(
+        &self,
+        symbol: &str,
+        interval: &str,
+        start_time: Option<u64>,
+        end_time: Option<u64>,
+        limit: Option<u16>,
+    ) -> BiAnResult<Uuid> {
+        let pkline = PKLine::new(symbol, interval, start_time, end_time, limit)?;
+        self.send_api_req("klines", Some(&pkline)).await
     }
 }
